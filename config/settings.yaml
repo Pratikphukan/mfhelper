@@ -1,0 +1,15 @@
+# --- Google Sheet destination --------------------------------------------
+# spreadsheet_id is the long ID inside the sheet's URL:
+#   https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit
+# worksheet is the tab name to append into; it will be created if missing.
+google_sheet:
+  spreadsheet_id: "1vgZK6-n3L5QeOuLkfKO0sSNmCkUplTEdmPhWa4UzJYQ"
+  worksheet: "Daily NAV"
+
+# --- Rolling window ------------------------------------------------------
+# Maximum number of distinct run-dates to keep in the sheet.
+# After each append, rows older than this many run-dates are deleted.
+history_days: 30
+
+# --- Timezone for run timestamps in the sheet ----------------------------
+timezone: "Asia/Kolkata"

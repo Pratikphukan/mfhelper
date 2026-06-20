@@ -1,0 +1,144 @@
+# Maps each fund (by AMFI scheme code) to its benchmark index.
+#
+# Schema per entry:
+#   code:        AMFI scheme code (string, must match config/funds.yaml).
+#   fund_name:   Free-form display name (not used at runtime; here as
+#                a comment so this file is self-explanatory).
+#   index_name:  Index name as it appears on niftyindices.com's
+#                historical-data dropdown. Case-sensitive. Leave EMPTY
+#                ("") to document an intended benchmark that the current
+#                fetcher (mfhelper/benchmarks.py) cannot serve --
+#                returns_main.py and plot_main.py will silently skip
+#                vs_benchmark for any entry whose index_name is empty.
+#   variant:     "PR" (price-return, what niftyindices.com exposes) or
+#                "TRI" (total-return, gated). All entries below are PR.
+#   note:        Free-form annotation, surfaced into the per-fund JSON
+#                under vs_benchmark.data_quality.note. Use this to
+#                explain the PR-vs-TRI gap, benchmark changes over time,
+#                category caveats, etc.
+#
+# Why some funds have empty index_name:
+#   niftyindices.com only carries Nifty equity / strategy / fixed-income
+#   indexes. It does NOT carry:
+#     - Domestic gold price (RBI / MCX / GOLDBEES proxy needed)
+#     - CRISIL fixed-income series (CRISIL data is paywalled)
+#     - International indexes (MSCI ACWI, S&P 500, Russell 3000 etc.)
+#   Those funds are listed below with index_name="" and a note pointing
+#   at the correct ticker / data source for when we add yfinance or a
+#   gold-price fetcher in the future. Keeping them in this file (instead
+#   of just commenting them out) means the to-do is visible right
+#   alongside the rest of the configuration.
+#
+# Categories are noted in the comments to make within-category vs.
+# cross-category comparison obvious. SEBI's category definitions
+# strongly constrain the choice of benchmark.
+
+benchmarks:
+
+  # ----------------------------------------------------------------
+  # FLEXI CAP -- benchmark: broad-market all-cap (NIFTY 500)
+  # ----------------------------------------------------------------
+  - code: "120492"
+    fund_name: "JM Flexicap Fund (Direct) - Growth Option"
+    index_name: "NIFTY 500"
+    variant: "PR"
+    note: "JM Flexicap's official benchmark per AMC factsheet is NIFTY 500 TRI. We use PR (price-only) data because niftyindices.com's public endpoint exposes PR cleanly while TRI requires the gated UI. PR understates the benchmark by roughly the index dividend yield (~1.3%/yr for NIFTY 500), so the fund will appear ~1.3%/yr ahead of where the strictly-fair TRI comparison would put it. The shape of the comparison (rolling distribution, beat-rate, consistency) is preserved."
+
+  # ----------------------------------------------------------------
+  # MID CAP -- benchmark: NIFTY MIDCAP 150
+  # ----------------------------------------------------------------
+  - code: "127042"
+    fund_name: "Motilal Oswal Midcap Fund - Direct - Growth"
+    index_name: "NIFTY MIDCAP 150"
+    variant: "PR"
+    note: "Motilal Oswal Midcap's official benchmark is NIFTY Midcap 150 TRI (since 2018 SEBI recategorization; previously NIFTY Midcap 100). We use NIFTY Midcap 150 PR throughout for both pre- and post-2018 history, for consistency. PR understates the benchmark by the index dividend yield (~1.5%/yr for NIFTY Midcap 150), so the fund's apparent outperformance is overstated by that much."
+
+  # ----------------------------------------------------------------
+  # ELSS (TAX SAVER, EQUITY) -- benchmark: NIFTY 500
+  # SEBI requires ELSS funds to invest >=80% in equity. Most use
+  # NIFTY 500 TRI as the benchmark; some use NIFTY 200 TRI. Both of
+  # the ELSS funds you hold use NIFTY 500 per their latest factsheets.
+  # ----------------------------------------------------------------
+  - code: "120847"
+    fund_name: "quant ELSS Tax Saver Fund - Growth Option - Direct Plan"
+    index_name: "NIFTY 500"
+    variant: "PR"
+    note: "Quant ELSS's official benchmark is NIFTY 500 TRI. Same PR-vs-TRI caveat as the flexi-cap entry: the ~1.3%/yr index dividend yield makes the fund's apparent outperformance ~1.3%/yr higher than the strictly-fair TRI comparison."
+
+  - code: "135781"
+    fund_name: "Mirae Asset ELSS Tax Saver Fund - Direct Plan - Growth"
+    index_name: "NIFTY 500"
+    variant: "PR"
+    note: "Mirae ELSS Tax Saver's official benchmark is NIFTY 500 TRI. Same PR-vs-TRI caveat: fund will appear ~1.3%/yr ahead of where TRI would put it."
+
+  # ----------------------------------------------------------------
+  # LARGE & MID CAP -- benchmark: NIFTY LARGEMIDCAP 250
+  # SEBI requires Large & Mid Cap funds to hold >=35% large-cap and
+  # >=35% mid-cap. The standard benchmark is NIFTY LARGEMIDCAP 250
+  # TRI, an index that combines NIFTY 100 (large caps) and NIFTY
+  # MIDCAP 150 (mid caps).
+  # ----------------------------------------------------------------
+  - code: "119721"
+    fund_name: "SBI LARGE & MIDCAP FUND - DIRECT PLAN - Growth"
+    index_name: "NIFTY 200"
+    variant: "PR"
+    note: "BENCHMARK SUBSTITUTION: the fund's officially-stated benchmark is NIFTY LargeMidcap 250 TRI, but niftyindices.com's historical-data endpoint did not recognize any of the spellings probed for that index ('NIFTY LARGEMIDCAP 250', 'Nifty LargeMidcap 250', 'NIFTY Large Midcap 250', 'Nifty Large Midcap 250' -- two returned 0 rows, two timed out). Until the right spelling is found (or we add a yfinance fallback / NSE archive scraper), we use NIFTY 200 as a near-equivalent substitute. NIFTY 200 = top 200 stocks by full market cap = NIFTY 100 + NIFTY MIDCAP 100. NIFTY LARGEMIDCAP 250 = NIFTY 100 + NIFTY MIDCAP 150. They differ only by the bottom 50 midcap stocks and historically track within ~1%/yr of each other. So the comparison is directionally correct -- it's tilted very slightly more large-cap than the strict benchmark, which would understate the fund's downside vs benchmark in midcap-led drawdowns by roughly the 50-stock difference. PR-vs-TRI gap (~1.3-1.5%/yr) applies as for the other equity benchmarks."
+
+  # ----------------------------------------------------------------
+  # ARBITRAGE -- benchmark: NIFTY 50 Arbitrage / CRISIL Liquid
+  # Not currently fetchable from niftyindices.com (the index name
+  # we tried, "Nifty 50 Arbitrage Index", returned 0 rows -- their
+  # fixed-income / strategy index endpoint may use different names
+  # or require a separate page). For the strictly-correct benchmark
+  # we'd integrate AMFI's CRISIL series, which is paywalled; the
+  # cleanest replacement is the NIFTY 1D Rate Index (overnight)
+  # which serves as the standard arbitrage-fund benchmark. Marked
+  # as documented-but-skipped until that integration lands.
+  # ----------------------------------------------------------------
+  - code: "145724"
+    fund_name: "Tata Arbitrage Fund - Direct Plan - Growth"
+    index_name: ""
+    variant: "PR"
+    note: "Documented but not fetched. Tata Arbitrage's stated benchmark is NIFTY 50 Arbitrage Index. niftyindices.com's historical-data tool does not appear to expose this series under that exact name as of last probe (2026-06). To enable: either resolve the right niftyindices.com spelling (Reports -> Historical Data dropdown, look under 'Strategy' / 'Other' index family), or use NIFTY 1D Rate Index (overnight rate, the SEBI-permitted alternative for arbitrage funds), or proxy via CRISIL Liquid Fund Index when that data source is added."
+
+  # ----------------------------------------------------------------
+  # LIQUID DEBT -- benchmark: CRISIL Liquid Debt Index
+  # CRISIL fixed-income series are paywalled; not available on
+  # niftyindices.com. NIFTY Liquid Index is a partial proxy but the
+  # exact spelling we tried returned 0 rows (or timed out).
+  # ----------------------------------------------------------------
+  - code: "140196"
+    fund_name: "Edelweiss Liquid Fund - Direct Plan - Growth Option"
+    index_name: ""
+    variant: "PR"
+    note: "Documented but not fetched. Edelweiss Liquid's stated benchmark is CRISIL Liquid Debt Index, which is not exposed by niftyindices.com (CRISIL data is licensed). Closest free proxies are NIFTY Liquid Index or NIFTY 1D Rate Index, both via niftyindices.com but with spelling unverified at config-write time. Note: fund-level vs-benchmark comparison is much less meaningful for liquid funds (returns track overnight rates by design); this fund is included in the per-fund returns JSON for completeness but the alpha-vs-benchmark story is uninformative regardless."
+
+  # ----------------------------------------------------------------
+  # GOLD -- benchmark: Domestic Price of Gold (INR)
+  # niftyindices.com does NOT carry the domestic gold price index.
+  # The right data source is either the RBI gold reference rate, the
+  # MCX gold spot, or yfinance's GOLDBEES.NS (Gold ETF) as a proxy.
+  # All require a fetcher we haven't built yet.
+  # ----------------------------------------------------------------
+  - code: "119788"
+    fund_name: "SBI GOLD FUND - DIRECT PLAN - GROWTH"
+    index_name: ""
+    variant: "PR"
+    note: "Documented but not fetched. SBI Gold Fund's benchmark is the Domestic Price of Gold (INR). niftyindices.com does not carry this. Cleanest path to enable: add a yfinance fetcher and use 'GOLDBEES.NS' (Nippon India Gold ETF, listed on NSE) as a proxy -- it tracks the LBMA AM gold price in INR with negligible tracking error. Alternative: scrape RBI's daily gold reference rate. Note: the fund is itself essentially a gold-tracking instrument (ETF FoF), so 'alpha vs benchmark' should be small and stable -- mostly the fund's expense ratio."
+
+  # ----------------------------------------------------------------
+  # INTERNATIONAL EQUITY (FoF) -- benchmark: MSCI / S&P / Russell
+  # niftyindices.com only covers Indian indexes. International FoF
+  # benchmarks need yfinance or a similar global data source.
+  # ----------------------------------------------------------------
+  - code: "148485"
+    fund_name: "Axis Global Equity Alpha Fund of Fund - Direct Plan - Growth Option"
+    index_name: ""
+    variant: "PR"
+    note: "Documented but not fetched. Axis Global Equity Alpha invests in Schroders Global Equity Alpha Fund and benchmarks against MSCI ACWI in INR. niftyindices.com does not carry international indexes. To enable: add a yfinance fetcher and use ticker 'ACWI' (iShares MSCI ACWI ETF, USD), then convert to INR using the RBI USD/INR reference rate. Currency-conversion choice (spot vs end-of-period) materially affects the comparison."
+
+  - code: "118551"
+    fund_name: "Franklin U.S. Opportunities Equity Active Fund of Funds - Direct - Growth"
+    index_name: ""
+    variant: "PR"
+    note: "Documented but not fetched. Franklin US Opportunities benchmarks against Russell 3000 Growth Index in INR. niftyindices.com does not carry international indexes. To enable: add a yfinance fetcher; the cleanest tickers are '^RUATR' (Russell 3000 Total Return) or 'IWZ' (iShares Russell 3000 ETF), with USD->INR conversion. As a coarser proxy, the S&P 500 (^GSPC or 'SPY') is acceptable since US large-cap dominates this fund's holdings."

@@ -1,0 +1,49 @@
+# Funds for the analytics report -- separate list from funds.yaml.
+#
+# Use this for "long view" funds you want to research / shortlist by
+# returns and risk metrics. The daily NAV scheduler ignores this file
+# and continues to use config/funds.yaml as the tracking list.
+#
+# Each entry needs:
+#   - code: AMFI scheme code as a string (wrap in quotes to preserve leading zeros)
+#   - name: Optional display name. If omitted, mfapi.in's scheme name is used.
+#   - expense_ratio: Optional manual override for the TER as a percent
+#                    (e.g. 0.42). Skip this and the report will try to
+#                    auto-fetch from Groww; values you set here take
+#                    precedence over the auto-fetch.
+#   - groww_slug:    Optional Groww URL fragment hint, e.g.
+#                    "jm-multi-strategy-fund-direct-growth". Useful for
+#                    funds whose AMC has renamed them since launch (Groww
+#                    keeps the legacy slug). Only needed if the auto
+#                    heuristic gives "Could not auto-fetch expense ratio"
+#                    -- find the slug by visiting the fund on groww.in
+#                    and copying the part after /mutual-funds/.
+#
+# Output: a worksheet named "Fund Analytics" in the same Google Sheet as
+# the daily NAV tab. The tab is overwritten on each run.
+#
+# Run with:
+#   .venv/bin/python analytics_main.py
+#
+# How to find an AMFI scheme code:
+#   1. Open https://www.amfiindia.com/spages/NAVAll.txt
+#   2. Search for a keyword from the fund's name
+#   3. The leftmost number on that line is the scheme code
+
+funds:
+  - code: "140327"
+    name: "Edelweiss Emerging Markets Opportunities Equity Offshore Fund Direct Growth"
+  - code: "140243"
+    name: "Edelweiss Greater China Equity Offshore Fund Direct Growth"
+  - code: "118559"
+    name: "Franklin Asian Equity Fund Direct Growth"
+  - code: "148063"
+    name: "Edelweiss US Technology Equity FoF Direct Growth"
+  - code: "140296"
+    name: "Edelweiss Europe Dynamic Equity Offshore Fund Direct Growth"
+  - code: "140274"
+    name: "Edelweiss US Value Equity Offshore Fund Direct Growth"
+  - code: "118551"
+    name: "Franklin U.S. Opportunities Equity Active FoF Direct Growth"
+  - code: "140256"
+    name: "Edelweiss ASEAN Equity Offshore Fund Direct Growth"

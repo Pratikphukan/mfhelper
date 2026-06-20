@@ -1,0 +1,34 @@
+# List the mutual funds you want to track.
+#
+# Each entry needs:
+#   - code: AMFI scheme code as a string (wrap in quotes to preserve leading zeros)
+#   - name: Optional display name (what you call it). If omitted, AMFI's scheme
+#           name from NAVAll.txt is used in the Google Sheet.
+#
+# How to find an AMFI scheme code:
+#   1. Download https://www.amfiindia.com/spages/NAVAll.txt in a browser
+#   2. Ctrl/Cmd-F for a keyword from the fund's name (AMC, fund family, plan)
+#   3. The leftmost number in that line is the scheme code
+#   Examples shown below are illustrative only -- replace with your own.
+
+funds:
+  - code: "119788"
+    name: "SBI GOLD FUND- DIRECT PLAN - GROWTH"
+  - code: "145724"
+    name: "Tata Arbitrage Fund-Direct Plan-Growth"
+  - code: "120847"
+    name: "quant ELSS Tax Saver Fund - Growth Option - Direct Plan"
+  - code: "140196"
+    name: "Edelweiss Liquid Fund - Direct Plan - Growth Option"
+  - code: "119721"
+    name: "SBI LARGE & MIDCAP FUND -DIRECT PLAN -Growth"
+  - code: "135781"
+    name: "Mirae Asset ELSS Tax Saver Fund - Direct Plan - Growth"
+  - code: "120492"
+    name: "JM Flexicap Fund (Direct) - Growth Option"
+  - code: "127042"
+    name: "Motilal Oswal Midcap Fund-Direct Plan-Growth Option"
+  - code: "148485"
+    name: "Axis Global Equity Alpha Fund of Fund - Direct Plan - Growth Option"
+  - code: "118551"
+    name: "Franklin U.S. Opportunities Equity Active Fund of Funds - Direct - Growth"

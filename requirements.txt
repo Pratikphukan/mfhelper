@@ -1,0 +1,8 @@
+requests>=2.32,<3
+gspread>=6.1,<7
+google-auth-oauthlib>=1.2,<2
+PyYAML>=6.0,<7
+# matplotlib is only used by plot_main.py for rolling-return PNGs.
+# All other CLIs (main.py, returns_main.py, analytics_main.py, etc.)
+# work without it -- safe to skip if you're never going to plot.
+matplotlib>=3.8,<4
