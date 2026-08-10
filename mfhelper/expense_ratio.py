@@ -100,6 +100,7 @@ class ExpenseRatioResult:
     expense_ratio_pct: float
     source: str            # e.g. "groww:<slug>" or "manual"
     fund_name_seen: str    # the scheme_name field on the page we trusted
+    aum_crore: float | None = None
 
 
 # --- slug candidates ---------------------------------------------------------
@@ -223,10 +224,19 @@ def _extract_from_next_data(
     except (TypeError, ValueError):
         return None
 
+    aum_raw = pp.get("aum")
+    aum_crore: float | None = None
+    if aum_raw is not None:
+        try:
+            aum_crore = round(float(str(aum_raw)), 2)
+        except (TypeError, ValueError):
+            pass
+
     return ExpenseRatioResult(
         expense_ratio_pct=round(value, 2),
         source=f"groww:{pp.get('search_id') or ''}",
         fund_name_seen=str(pp.get("scheme_name") or "").strip(),
+        aum_crore=aum_crore,
     )
 
 

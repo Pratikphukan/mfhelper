@@ -43,12 +43,14 @@ HEADERS = (
     "SD %",
     "Sharpe",
     "Sortino",
+    "AUM (Cr.)",
     "Expense %",
     "Last Updated (IST)",
 )
 
 _PERCENT_FMT = {"type": "NUMBER", "pattern": '0.00"%"'}
 _RATIO_FMT = {"type": "NUMBER", "pattern": "0.00"}
+_AUM_FMT = {"type": "NUMBER", "pattern": '#,##0.00'}
 _TEXT_FMT = {"type": "TEXT"}
 
 # Per-column number formats, aligned with HEADERS above.
@@ -63,6 +65,7 @@ _COLUMN_FORMATS = (
     _PERCENT_FMT,   # SD
     _RATIO_FMT,     # Sharpe
     _RATIO_FMT,     # Sortino
+    _AUM_FMT,       # AUM (Cr.)
     _PERCENT_FMT,   # Expense
     None,           # Last Updated
 )
@@ -83,6 +86,7 @@ class AnalyticsRow:
     sd_pct: float | None
     sharpe: float | None
     sortino: float | None
+    aum_crore: float | None
     expense_pct: float | None
     last_updated_ist: datetime
 
@@ -107,6 +111,7 @@ class AnalyticsRow:
             fmt_pct(self.sd_pct),
             fmt_ratio(self.sharpe),
             fmt_ratio(self.sortino),
+            fmt_ratio(self.aum_crore),
             fmt_pct(self.expense_pct),
             self.last_updated_ist.strftime("%Y-%m-%d %H:%M:%S"),
         ]

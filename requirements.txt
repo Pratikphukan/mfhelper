@@ -6,3 +6,9 @@ PyYAML>=6.0,<7
 # All other CLIs (main.py, returns_main.py, analytics_main.py, etc.)
 # work without it -- safe to skip if you're never going to plot.
 matplotlib>=3.8,<4
+
+# Dependencies for the Gemini-powered MCP Agent
+anthropic>=0.51.0
+mcp[cli]>=1.8.0
+prompt-toolkit>=3.0.51
+python-dotenv>=1.1.0

@@ -35,7 +35,7 @@ from mfhelper.analytics_sheet import (
     AnalyticsRow,
     AnalyticsSheetWriter,
 )
-from mfhelper.config import load_analytics_funds, load_settings
+from mfhelper.config import FundConfig, load_analytics_funds, load_settings
 from mfhelper.expense_ratio import lookup_expense_ratio
 from mfhelper.mfapi import fetch_history
 
@@ -48,6 +48,16 @@ ANALYTICS_FUNDS_PATH = CONFIG_DIR / "analytics_funds.yaml"
 SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
 CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
 TOKEN_PATH = DATA_DIR / "token.json"
+
+
+# ==============================================================================
+# CATEGORY-DRIVEN YAML CONFIGURATION
+# ==============================================================================
+# The script dynamically searches for the specified YAML file. You can create
+# any YAML file in the `config/` directory (e.g., `flexicap.yaml`, `midcap.yaml`,
+# `international.yaml`) and pass its name or path.
+# The sheet tab name is automatically derived from the filename.
+# ==============================================================================
 
 
 def _configure_logging() -> None:
@@ -73,15 +83,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--funds",
-        type=Path,
-        default=ANALYTICS_FUNDS_PATH,
-        help="Path to the analytics funds YAML (default: config/analytics_funds.yaml).",
+        type=str,
+        default="analytics_funds",
+        help="Path or name of the analytics funds YAML (e.g. 'config/analytics_funds.yaml', or just 'flexicap').",
     )
     p.add_argument(
         "--tab",
         type=str,
         default=ANALYTICS_TAB_DEFAULT,
-        help=f"Worksheet tab name to write into (default: {ANALYTICS_TAB_DEFAULT!r}).",
+        help="Worksheet tab name to write into (default: derived from the YAML filename).",
     )
     p.add_argument(
         "--no-expense-scrape",
@@ -99,11 +109,47 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def run(args: argparse.Namespace) -> int:
     log = logging.getLogger("mfhelper.analytics_main")
 
-    try:
-        funds = load_analytics_funds(args.funds)
-    except (FileNotFoundError, ValueError) as exc:
-        print(f"Configuration error loading {args.funds}: {exc}", file=sys.stderr)
+    funds_input = args.funds
+    funds_path = Path(funds_input)
+
+    # Resolve funds_path dynamically
+    if not funds_path.exists():
+        # Try checking in CONFIG_DIR
+        candidate1 = CONFIG_DIR / f"{funds_input}.yaml"
+        candidate2 = CONFIG_DIR / f"{funds_input}_analytics_funds.yaml"
+        if candidate1.exists():
+            funds_path = candidate1
+        elif candidate2.exists():
+            funds_path = candidate2
+        else:
+            # Fallback to the default config if none found
+            funds_path = CONFIG_DIR / "analytics_funds.yaml" if funds_input == "analytics_funds" else Path(funds_input)
+
+    if not funds_path.exists():
+        print(f"Configuration error: Fund list file not found at {funds_path}", file=sys.stderr)
         return 2
+
+    try:
+        funds = load_analytics_funds(funds_path)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Configuration error loading {funds_path}: {exc}", file=sys.stderr)
+        return 2
+
+    # Derive tab name from filename stem
+    stem = funds_path.stem
+    if stem == "analytics_funds":
+        default_tab = "Fund Analytics"
+    else:
+        # e.g., flexicap_analytics_funds -> flexicap
+        clean_stem = stem
+        if clean_stem.endswith("_analytics_funds"):
+            clean_stem = clean_stem[:-16]
+        # flexicap -> Flexicap
+        display_stem = clean_stem.replace("_", " ").title()
+        default_tab = f"Fund Analytics - {display_stem}"
+
+    tab_name = args.tab if args.tab != ANALYTICS_TAB_DEFAULT else default_tab
+
     try:
         settings = load_settings(SETTINGS_PATH)
     except (FileNotFoundError, ValueError) as exc:
@@ -115,7 +161,7 @@ def run(args: argparse.Namespace) -> int:
 
     log.info(
         "Fund Analytics: %d fund(s) from %s -> %s/%s%s",
-        len(funds), args.funds, settings.google_sheet.spreadsheet_id, args.tab,
+        len(funds), funds_path, settings.google_sheet.spreadsheet_id, tab_name,
         " (DRY RUN)" if args.dry_run else "",
     )
 
@@ -146,20 +192,29 @@ def run(args: argparse.Namespace) -> int:
             _fmt(analytics.sortino),
         )
 
-        # Expense ratio: manual YAML override > auto scrape > blank.
+        # Expense ratio and AUM lookup.
         expense_pct: float | None = fc.expense_ratio_pct
+        aum_crore: float | None = None
+
         if expense_pct is not None:
-            log.info("  Expense ratio (manual YAML): %.2f%%", expense_pct)
-        elif args.no_expense_scrape:
-            log.info("  Expense ratio scrape skipped (--no-expense-scrape).")
-        else:
+            log.info("  Expense ratio (manual YAML/code): %.2f%%", expense_pct)
+
+        # Even if expense ratio is set manually, we should scrape AUM if scraping is allowed.
+        if not args.no_expense_scrape:
             er = lookup_expense_ratio(
                 scheme_code=fc.code,
                 scheme_name=fc.name or result.scheme_name,
                 slug_hint=fc.groww_slug,
             )
             if er is not None:
-                expense_pct = er.expense_ratio_pct
+                if expense_pct is None:
+                    expense_pct = er.expense_ratio_pct
+                aum_crore = er.aum_crore
+
+        if expense_pct is not None:
+            log.info("  Expense ratio: %.2f%%", expense_pct)
+        if aum_crore is not None:
+            log.info("  AUM (Cr.): %s", f"₹{aum_crore:,.2f}")
 
         display_name = fc.name or result.scheme_name
         rows.append(AnalyticsRow(
@@ -173,6 +228,7 @@ def run(args: argparse.Namespace) -> int:
             sd_pct=analytics.sd_pct,
             sharpe=analytics.sharpe,
             sortino=analytics.sortino,
+            aum_crore=aum_crore,
             expense_pct=expense_pct,
             last_updated_ist=now_ist,
         ))
@@ -185,7 +241,7 @@ def run(args: argparse.Namespace) -> int:
 
     writer = AnalyticsSheetWriter(
         spreadsheet_id=settings.google_sheet.spreadsheet_id,
-        worksheet_name=args.tab,
+        worksheet_name=tab_name,
         credentials_path=CREDENTIALS_PATH,
         token_path=TOKEN_PATH,
     )
@@ -210,6 +266,7 @@ def _empty_row(name: str, code: str, now: datetime) -> AnalyticsRow:
         sd_pct=None,
         sharpe=None,
         sortino=None,
+        aum_crore=None,
         expense_pct=None,
         last_updated_ist=now,
     )

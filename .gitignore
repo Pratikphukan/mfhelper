@@ -15,3 +15,5 @@ data/benchmark_history/
 logs/
 
 .DS_Store
+.env
+agent/.env
