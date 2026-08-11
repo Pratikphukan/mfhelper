@@ -23,7 +23,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import logging
@@ -38,6 +38,11 @@ from mfhelper.analytics_sheet import (
 from mfhelper.config import FundConfig, load_analytics_funds, load_settings
 from mfhelper.expense_ratio import lookup_expense_ratio
 from mfhelper.mfapi import fetch_history
+from mfhelper.returns_calc import (
+    _drawdown_analysis,
+    hypothetical_sip_xirr,
+    risk_adjusted,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -180,16 +185,37 @@ def run(args: argparse.Namespace) -> int:
             continue
 
         analytics = compute_analytics(result.history)
+        as_of = result.history[0].nav_date
+
+        # Calculate SIP returns
+        sip_res = hypothetical_sip_xirr(result.history, as_of)
+        sip_3y = sip_res.get("3y_xirr_pct")
+        sip_5y = sip_res.get("5y_xirr_pct")
+
+        # Calculate Calmar ratio
+        ra_res = risk_adjusted(result.history, as_of)
+        calmar_3y = ra_res.get("calmar_3y")
+
+        # Calculate Max Drawdown (3Y)
+        risk_cutoff = as_of - timedelta(days=365 * 3)
+        history_3y = [p for p in result.history if p.nav_date >= risk_cutoff]
+        dd_res = _drawdown_analysis(history_3y)
+        max_dd_3y = dd_res.get("max_drawdown_pct")
+
         log.info(
-            "  1Y=%s  3Y=%s  5Y=%s  7Y=%s  10Y=%s  SD=%s  Sharpe=%s  Sortino=%s",
+            "  1Y=%s  3Y=%s (SIP=%s)  5Y=%s (SIP=%s)  7Y=%s  10Y=%s  SD=%s  Sharpe=%s  Sortino=%s  Calmar=%s  MaxDD(3Y)=%s",
             _fmt_pct(analytics.return_1y_abs_pct),
             _fmt_pct(analytics.cagr_3y_pct),
+            _fmt_pct(sip_3y),
             _fmt_pct(analytics.cagr_5y_pct),
+            _fmt_pct(sip_5y),
             _fmt_pct(analytics.cagr_7y_pct),
             _fmt_pct(analytics.cagr_10y_pct),
             _fmt_pct(analytics.sd_pct),
             _fmt(analytics.sharpe),
             _fmt(analytics.sortino),
+            _fmt(calmar_3y),
+            _fmt_pct(max_dd_3y),
         )
 
         # Expense ratio and AUM lookup.
@@ -222,12 +248,16 @@ def run(args: argparse.Namespace) -> int:
             scheme_code=fc.code,
             return_1y_abs_pct=analytics.return_1y_abs_pct,
             cagr_3y_pct=analytics.cagr_3y_pct,
+            sip_3y_pct=sip_3y,
             cagr_5y_pct=analytics.cagr_5y_pct,
+            sip_5y_pct=sip_5y,
             cagr_7y_pct=analytics.cagr_7y_pct,
             cagr_10y_pct=analytics.cagr_10y_pct,
             sd_pct=analytics.sd_pct,
             sharpe=analytics.sharpe,
             sortino=analytics.sortino,
+            calmar_3y=calmar_3y,
+            max_dd_3y_pct=max_dd_3y,
             aum_crore=aum_crore,
             expense_pct=expense_pct,
             last_updated_ist=now_ist,
@@ -260,12 +290,16 @@ def _empty_row(name: str, code: str, now: datetime) -> AnalyticsRow:
         scheme_code=code,
         return_1y_abs_pct=None,
         cagr_3y_pct=None,
+        sip_3y_pct=None,
         cagr_5y_pct=None,
+        sip_5y_pct=None,
         cagr_7y_pct=None,
         cagr_10y_pct=None,
         sd_pct=None,
         sharpe=None,
         sortino=None,
+        calmar_3y=None,
+        max_dd_3y_pct=None,
         aum_crore=None,
         expense_pct=None,
         last_updated_ist=now,
