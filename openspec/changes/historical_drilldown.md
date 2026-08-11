@@ -1,6 +1,6 @@
 # OpenSpec: Per-Fund Historical Drilldown Report
 
-This specification documents the architecture, parameters, and layout for the on-demand, single-fund historical drilldown capability in **MFHelper**.
+This specification documents the on-demand, single-fund historical drilldown capability in **MFHelper**.
 
 ---
 
