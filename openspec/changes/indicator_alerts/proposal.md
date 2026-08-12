@@ -19,7 +19,10 @@ By setting up an active alert engine, we can dynamically detect and flag:
    - **Tier 2 (SMA Discount / Moderate Lumpsum):** NAV is trading in a moderate discount below SMA (between -2% and -10%).
    - **Tier 3 (SMA Capitulation / Aggressive Lumpsum):** NAV is in extreme capitulation below the 200-day average (<= -10%).
 4. **200D SMA Trend Crossing Reversals:** Bullish breakouts above or bearish breakdowns below the long-term trend line.
-5. **Significant discounts** (NAV dropping more than 15% below its trailing 52-week peak).
+5. **3-Tier 52W High Discount Signals (Peak Pyramiding):**
+   - **Tier 1 (Mild Discount / Small Top-up):** NAV drops between -5% and -10% from its 52-week peak (common pullback within strong bull phases).
+   - **Tier 2 (Moderate Discount / Moderate Lumpsum):** NAV drops between -10% and -20% from its 52-week peak (solid margin-of-safety corrections).
+   - **Tier 3 (Deep Capitulation / Aggressive Lumpsum):** NAV drops $\le -20\%$ from its 52-week peak (rare generational buying opportunities or deep sector bottoms).
 
 ---
 
