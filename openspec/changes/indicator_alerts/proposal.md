@@ -9,9 +9,10 @@ Introduce an automated, rule-based notification system that triggers real-time e
 While EOD mutual fund data is saved in Google Sheets daily, investors do not always open the sheet to check technical status. For high-volatility mutual funds (like Small-Cap or Sectoral funds), technical entry/exit zones can emerge and pass without notice.
 
 By setting up an active alert engine, we can dynamically detect and flag:
-1. **Multi-Tier RSI Buy Signals:**
-   - **Tier 1 (Minor Dip / Small Deployments):** RSI-14 drops below 45 (common pullback zones inside uptrends).
-   - **Tier 2 (Deep Oversold / Larger Deployments):** RSI-14 drops below 35 (rare, high margin-of-safety corrections).
+1. **3-Tier RSI Buy Signals:**
+   - **Tier 1 (Mild Pullback / Small Top-up):** RSI-14 drops below 50 (healthy bull market cooling-off periods).
+   - **Tier 2 (Moderate Dip / Moderate Lumpsum):** RSI-14 drops below 42 (stronger corrections within structural uptrends).
+   - **Tier 3 (Deep Oversold / Aggressive Lumpsum):** RSI-14 drops below 35 (rare panic corrections or market bottoms).
 2. **Overbought exit zones** (RSI-14 rising above 70).
 3. **Long-term trend reversals** (the daily NAV crossing over or under its 200-day Simple Moving Average).
 4. **Significant discounts** (NAV dropping more than 15% below its trailing 52-week peak).
