@@ -35,7 +35,8 @@ We introduce a new configuration file to isolate rules and credentials:
 
 ```yaml
 rules:
-  rsi_oversold: 30.0
+  rsi_minor_dip: 45.0        # Tier 1 buy zone (small deployment)
+  rsi_oversold: 35.0         # Tier 2 buy zone (aggressive deployment)
   rsi_overbought: 70.0
   discount_threshold_pct: -15.0
   enable_sma_crossing: true
@@ -56,8 +57,9 @@ email:
 
 For each fund, the system checks today's computed indicators against the boundaries:
 
-1. **RSI Oversold:** `rsi_value <= rsi_oversold` (Alert Type: **BUY / ACCUMULATE**).
-2. **RSI Overbought:** `rsi_value >= rsi_overbought` (Alert Type: **MOMENTUM WARNING / TRIM**).
+1. **RSI Minor Dip (Tier 1 Buy):** `rsi_value <= rsi_minor_dip` and `rsi_value > rsi_oversold` (Alert Type: **BUY TIER 1 / MINOR DIP - Deploy Smaller Amounts**).
+2. **RSI Deep Oversold (Tier 2 Buy):** `rsi_value <= rsi_oversold` (Alert Type: **BUY TIER 2 / DEEP OVERSOLD - Deploy Larger Amounts**).
+3. **RSI Overbought:** `rsi_value >= rsi_overbought` (Alert Type: **MOMENTUM WARNING / TRIM**).
 3. **Discount Zone:** `dist_52w_high_pct <= discount_threshold_pct` (Alert Type: **BUY / EXCELLENT MARGIN OF SAFETY**).
 4. **200D SMA Crossings:**
    To determine if a trend crossing occurred today, we evaluate today's NAV and yesterday's NAV relative to their respective 200-day Simple Moving Averages:
