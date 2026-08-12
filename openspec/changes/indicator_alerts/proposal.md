@@ -14,8 +14,12 @@ By setting up an active alert engine, we can dynamically detect and flag:
    - **Tier 2 (Moderate Dip / Moderate Lumpsum):** RSI-14 drops below 45 (medium corrections, ideal for standard accumulation).
    - **Tier 3 (Deep Oversold / Aggressive Lumpsum):** RSI-14 drops below 35 (extreme corrections, highly favorable entries).
 2. **Overbought exit zones** (RSI-14 rising above 70).
-3. **Long-term trend reversals** (the daily NAV crossing over or under its 200-day Simple Moving Average).
-4. **Significant discounts** (NAV dropping more than 15% below its trailing 52-week peak).
+3. **3-Tier 200D SMA Buy Signals:**
+   - **Tier 1 (SMA Support / Small Top-up):** NAV is testing the 200-day Simple Moving Average (between +2% and -2%), acting as trend line support.
+   - **Tier 2 (SMA Discount / Moderate Lumpsum):** NAV is trading in a moderate discount below SMA (between -2% and -10%).
+   - **Tier 3 (SMA Capitulation / Aggressive Lumpsum):** NAV is in extreme capitulation below the 200-day average (<= -10%).
+4. **200D SMA Trend Crossing Reversals:** Bullish breakouts above or bearish breakdowns below the long-term trend line.
+5. **Significant discounts** (NAV dropping more than 15% below its trailing 52-week peak).
 
 ---
 
