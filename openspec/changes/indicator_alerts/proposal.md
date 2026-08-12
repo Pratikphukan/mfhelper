@@ -10,9 +10,9 @@ While EOD mutual fund data is saved in Google Sheets daily, investors do not alw
 
 By setting up an active alert engine, we can dynamically detect and flag:
 1. **3-Tier RSI Buy Signals:**
-   - **Tier 1 (Mild Pullback / Small Top-up):** RSI-14 drops below 50 (healthy bull market cooling-off periods).
-   - **Tier 2 (Moderate Dip / Moderate Lumpsum):** RSI-14 drops below 42 (stronger corrections within structural uptrends).
-   - **Tier 3 (Deep Oversold / Aggressive Lumpsum):** RSI-14 drops below 35 (rare panic corrections or market bottoms).
+   - **Tier 1 (Mild Pullback / Small Top-up):** RSI-14 drops below 55 (healthy cooling-off periods inside strong trends).
+   - **Tier 2 (Moderate Dip / Moderate Lumpsum):** RSI-14 drops below 45 (medium corrections, ideal for standard accumulation).
+   - **Tier 3 (Deep Oversold / Aggressive Lumpsum):** RSI-14 drops below 35 (extreme corrections, highly favorable entries).
 2. **Overbought exit zones** (RSI-14 rising above 70).
 3. **Long-term trend reversals** (the daily NAV crossing over or under its 200-day Simple Moving Average).
 4. **Significant discounts** (NAV dropping more than 15% below its trailing 52-week peak).

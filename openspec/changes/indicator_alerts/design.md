@@ -35,8 +35,8 @@ We introduce a new configuration file to isolate rules and credentials:
 
 ```yaml
 rules:
-  rsi_mild_pullback: 50.0    # Tier 1 buy zone (small top-up)
-  rsi_moderate_dip: 42.0     # Tier 2 buy zone (moderate lumpsum)
+  rsi_mild_pullback: 55.0    # Tier 1 buy zone (small top-up)
+  rsi_moderate_dip: 45.0     # Tier 2 buy zone (moderate lumpsum)
   rsi_deep_oversold: 35.0    # Tier 3 buy zone (aggressive lumpsum)
   rsi_overbought: 70.0
   discount_threshold_pct: -15.0
