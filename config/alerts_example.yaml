@@ -1,6 +1,6 @@
-# config/alerts.yaml.template
-# Template for Technical Indicator Alerts Settings
-# Copy this file to config/alerts.yaml and configure your settings.
+# config/alerts_example.yaml
+# Example template for Technical Indicator Alerts Settings
+# Copy this file to config/alerts.yaml and configure your active settings.
 
 rules:
   # 3-Tier RSI Buy Signals

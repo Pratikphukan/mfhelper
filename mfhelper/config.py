@@ -162,14 +162,14 @@ class AlertSettings:
 def load_alert_settings(path: Path) -> AlertSettings:
     """Load the alert configuration settings (``config/alerts.yaml``).
 
-    Falls back to ``config/alerts.yaml.template`` if the ignored user config
+    Falls back to ``config/alerts_example.yaml`` if the ignored user config
     is missing.
     """
     target_path = path
     if not target_path.exists():
-        template_path = target_path.with_suffix(".yaml.template")
-        if template_path.exists():
-            target_path = template_path
+        example_path = path.parent / "alerts_example.yaml"
+        if example_path.exists():
+            target_path = example_path
         else:
             raise FileNotFoundError(f"Alert configuration file not found at {path}")
 
