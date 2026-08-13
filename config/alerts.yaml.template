@@ -1,0 +1,31 @@
+# config/alerts.yaml.template
+# Template for Technical Indicator Alerts Settings
+# Copy this file to config/alerts.yaml and configure your settings.
+
+rules:
+  # 3-Tier RSI Buy Signals
+  rsi_mild_pullback: 55.0      # Tier 1 buy zone (small top-up)
+  rsi_moderate_dip: 45.0       # Tier 2 buy zone (moderate lumpsum)
+  rsi_deep_oversold: 35.0      # Tier 3 buy zone (aggressive lumpsum)
+  rsi_overbought: 70.0         # Momentum warning / trim zone
+
+  # 3-Tier 200D SMA Buy Signals
+  sma_trend_support_pct: 2.0        # Tier 1 buy zone (support distance from +2% to -2%)
+  sma_moderate_discount_pct: -2.0    # Tier 2 buy zone (discount distance from -2% to -10%)
+  sma_deep_capitulation_pct: -10.0   # Tier 3 buy zone (capitulation distance <= -10%)
+
+  # 3-Tier 52W Peak Discount Pyramiding Buy Signals
+  discount_mild_pct: -5.0           # Tier 1 buy zone (mild drop from peak -5% to -10%)
+  discount_moderate_pct: -10.0       # Tier 2 buy zone (moderate drop from peak -10% to -20%)
+  discount_deep_pct: -20.0           # Tier 3 buy zone (deep drop from peak <= -20%)
+
+  enable_sma_crossing: true          # Send alerts on Bullish / Bearish trend crossings
+
+email:
+  enable: false                      # Set to true to enable active SMTP email alerts
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  use_tls: true
+  sender_email: "your_email@gmail.com"
+  sender_password: ""                # Leave blank to load from EMAIL_PASSWORD environment variable
+  receiver_email: "receiver_email@gmail.com"

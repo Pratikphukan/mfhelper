@@ -32,7 +32,7 @@ import sys
 
 from mfhelper.amfi import fetch_and_parse
 from mfhelper.columns import SheetColumnStore, reconcile
-from mfhelper.config import load_funds, load_settings
+from mfhelper.config import load_funds, load_settings, load_alert_settings
 from mfhelper.metrics import (
     distance_from_200d_sma,
     distance_from_52w_high,
@@ -41,6 +41,7 @@ from mfhelper.metrics import (
 from mfhelper.mfapi import MfapiResult, fetch_history as mfapi_fetch_history
 from mfhelper.sheets import NavValue, SheetAppender
 from mfhelper.state import LastNavStore, PrevNav
+from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -49,6 +50,7 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 
 FUNDS_PATH = CONFIG_DIR / "funds.yaml"
 SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
+ALERTS_PATH = CONFIG_DIR / "alerts.yaml"
 CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
 TOKEN_PATH = DATA_DIR / "token.json"
 LAST_NAV_PATH = DATA_DIR / "last_nav.json"
@@ -76,11 +78,13 @@ def run() -> int:
 
     funds = load_funds(FUNDS_PATH)
     settings = load_settings(SETTINGS_PATH)
+    alert_settings = load_alert_settings(ALERTS_PATH)
     log.info(
-        "Loaded %d funds, target sheet %s/%s",
+        "Loaded %d funds, target sheet %s/%s. Alerts enabled: %s",
         len(funds),
         settings.google_sheet.spreadsheet_id,
         settings.google_sheet.worksheet,
+        alert_settings.email.enable,
     )
 
     tz = ZoneInfo(settings.timezone)
@@ -122,6 +126,7 @@ def run() -> int:
     nav_store = LastNavStore(LAST_NAV_PATH)
     prev_state = nav_store.load()
 
+    all_triggered_alerts = []
     values_by_code: dict[str, NavValue] = {}
     new_state: dict[str, PrevNav] = dict(prev_state)
     missing_codes: list[str] = []
@@ -195,6 +200,22 @@ def run() -> int:
         )
         new_state[fund.code] = PrevNav(nav=current_nav, nav_date=current_date)
 
+        # Check technical indicator buy/sell triggers
+        triggered = check_fund_alerts(
+            scheme_code=fund.code,
+            fund_name=display_names[fund.code],
+            history=mfapi_result.history if mfapi_result else [],
+            current_nav=current_nav,
+            current_date=current_date,
+            current_rsi=rsi_value,
+            current_dist_52w=dist_52w_pct,
+            current_dist_200d_sma=dist_200d_sma_pct,
+            rules=alert_settings.rules,
+        )
+        if triggered:
+            all_triggered_alerts.extend(triggered)
+            log.info("  [ALERT] Triggered %d indicator alert(s) for %s", len(triggered), fund.code)
+
     for code in ordered_codes:
         if code not in display_names:
             existing_fund = fund_by_code.get(code)
@@ -252,6 +273,9 @@ def run() -> int:
         len(ordered_codes),
         len(new_state),
     )
+
+    # Dispatch indicator alerts email digest if any are triggered
+    dispatch_alerts_email(all_triggered_alerts, alert_settings.email)
 
     if fallback_codes:
         log.info(

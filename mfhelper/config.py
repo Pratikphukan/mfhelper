@@ -125,3 +125,82 @@ def load_settings(path: Path) -> Settings:
         history_days=history_days,
         timezone=timezone,
     )
+
+
+@dataclass(frozen=True)
+class AlertRulesConfig:
+    rsi_mild_pullback: float
+    rsi_moderate_dip: float
+    rsi_deep_oversold: float
+    rsi_overbought: float
+    sma_trend_support_pct: float
+    sma_moderate_discount_pct: float
+    sma_deep_capitulation_pct: float
+    discount_mild_pct: float
+    discount_moderate_pct: float
+    discount_deep_pct: float
+    enable_sma_crossing: bool
+
+
+@dataclass(frozen=True)
+class AlertEmailConfig:
+    enable: bool
+    smtp_server: str
+    smtp_port: int
+    use_tls: bool
+    sender_email: str
+    sender_password: str
+    receiver_email: str
+
+
+@dataclass(frozen=True)
+class AlertSettings:
+    rules: AlertRulesConfig
+    email: AlertEmailConfig
+
+
+def load_alert_settings(path: Path) -> AlertSettings:
+    """Load the alert configuration settings (``config/alerts.yaml``).
+
+    Falls back to ``config/alerts.yaml.template`` if the ignored user config
+    is missing.
+    """
+    target_path = path
+    if not target_path.exists():
+        template_path = target_path.with_suffix(".yaml.template")
+        if template_path.exists():
+            target_path = template_path
+        else:
+            raise FileNotFoundError(f"Alert configuration file not found at {path}")
+
+    with target_path.open("r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+
+    rules_raw = raw.get("rules") or {}
+    email_raw = raw.get("email") or {}
+
+    rules = AlertRulesConfig(
+        rsi_mild_pullback=float(rules_raw.get("rsi_mild_pullback", 55.0)),
+        rsi_moderate_dip=float(rules_raw.get("rsi_moderate_dip", 45.0)),
+        rsi_deep_oversold=float(rules_raw.get("rsi_deep_oversold", 35.0)),
+        rsi_overbought=float(rules_raw.get("rsi_overbought", 70.0)),
+        sma_trend_support_pct=float(rules_raw.get("sma_trend_support_pct", 2.0)),
+        sma_moderate_discount_pct=float(rules_raw.get("sma_moderate_discount_pct", -2.0)),
+        sma_deep_capitulation_pct=float(rules_raw.get("sma_deep_capitulation_pct", -10.0)),
+        discount_mild_pct=float(rules_raw.get("discount_mild_pct", -5.0)),
+        discount_moderate_pct=float(rules_raw.get("discount_moderate_pct", -10.0)),
+        discount_deep_pct=float(rules_raw.get("discount_deep_pct", -20.0)),
+        enable_sma_crossing=bool(rules_raw.get("enable_sma_crossing", True)),
+    )
+
+    email = AlertEmailConfig(
+        enable=bool(email_raw.get("enable", False)),
+        smtp_server=str(email_raw.get("smtp_server", "smtp.gmail.com")).strip(),
+        smtp_port=int(email_raw.get("smtp_port", 587)),
+        use_tls=bool(email_raw.get("use_tls", True)),
+        sender_email=str(email_raw.get("sender_email", "")).strip(),
+        sender_password=str(email_raw.get("sender_password", "")),
+        receiver_email=str(email_raw.get("receiver_email", "")).strip(),
+    )
+
+    return AlertSettings(rules=rules, email=email)
