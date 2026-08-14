@@ -288,7 +288,7 @@ def dispatch_alerts_email(
 
     try:
         log.info("Connecting to SMTP server %s:%d ...", email_config.smtp_server, email_config.smtp_port)
-        with smtplib.SMTP(email_config.smtp_server, email_config.smtp_port) as server:
+        with smtplib.SMTP(email_config.smtp_server, email_config.smtp_port, timeout=15) as server:
             if email_config.use_tls:
                 server.starttls()
             server.login(sender, password)
