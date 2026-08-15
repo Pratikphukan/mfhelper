@@ -26,11 +26,15 @@ jobs:
         pip install -r requirements.txt
 
     - name: Reconstruct Secure Config Files
+      env:
+        GCP_CRED_BASE64: ${{ secrets.GCP_CREDENTIALS_JSON }}
+        GCP_TOKEN_BASE64: ${{ secrets.GCP_TOKEN_JSON }}
+        ALERTS_YAML_CONTENT: ${{ secrets.ALERTS_YAML }}
       run: |
         mkdir -p config data
-        echo "${{ secrets.GCP_CREDENTIALS_JSON }}" | base64 -d > config/credentials.json
-        echo "${{ secrets.GCP_TOKEN_JSON }}" | base64 -d > data/token.json
-        echo "${{ secrets.ALERTS_YAML }}" > config/alerts.yaml
+        echo "$GCP_CRED_BASE64" | base64 -d > config/credentials.json
+        echo "$GCP_TOKEN_BASE64" | base64 -d > data/token.json
+        echo "$ALERTS_YAML_CONTENT" > config/alerts.yaml
 
     - name: Run Daily NAV Tracker
       env:
