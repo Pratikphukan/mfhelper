@@ -29,12 +29,12 @@ jobs:
       env:
         GCP_CRED_BASE64: ${{ secrets.GCP_CREDENTIALS_JSON }}
         GCP_TOKEN_BASE64: ${{ secrets.GCP_TOKEN_JSON }}
-        ALERTS_YAML_CONTENT: ${{ secrets.ALERTS_YAML }}
+        ALERTS_YAML_BASE64: ${{ secrets.ALERTS_YAML }}
       run: |
         mkdir -p config data
         echo "$GCP_CRED_BASE64" | base64 -d > config/credentials.json
         echo "$GCP_TOKEN_BASE64" | base64 -d > data/token.json
-        echo "$ALERTS_YAML_CONTENT" > config/alerts.yaml
+        echo "$ALERTS_YAML_BASE64" | base64 -d > config/alerts.yaml
 
     - name: Run Daily NAV Tracker
       env:
