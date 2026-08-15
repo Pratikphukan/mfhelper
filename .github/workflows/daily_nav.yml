@@ -2,8 +2,9 @@ name: Daily NAV & Technical Alerts Scheduler
 
 on:
   schedule:
-    # 5:00 AM UTC translates precisely to 10:30 AM IST
-    - cron: '0 5 * * *'
+    # 5:00 AM UTC translates precisely to 10:30 AM IST.
+    # Runs Tuesday through Saturday because AMFI publishes business-day (Mon-Fri) NAVs late evening.
+    - cron: '0 5 * * TUE-SAT'
   workflow_dispatch: # Allows triggering the run manually from the GitHub Actions tab
 
 jobs:
