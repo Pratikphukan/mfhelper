@@ -20,7 +20,7 @@ import logging
 from pathlib import Path
 import sys
 
-from mfhelper.config import load_funds
+from mfhelper.config import load_funds, load_settings
 from mfhelper.overlap import (
     calculate_overlap_percentage,
     fetch_fund_holdings,
@@ -31,6 +31,7 @@ from mfhelper.overlap import (
     resolve_mfid_by_isin,
     save_cached_mappings,
 )
+from mfhelper.overlap_sheet import OverlapSheetWriter, OVERLAP_TAB_DEFAULT
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -38,6 +39,9 @@ DATA_DIR = PROJECT_ROOT / "data"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 FUNDS_PATH_DEFAULT = CONFIG_DIR / "funds.yaml"
+SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
+CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
+TOKEN_PATH = DATA_DIR / "token.json"
 
 
 def _configure_logging() -> None:
@@ -226,6 +230,25 @@ def main(argv: list[str] | None = None) -> int:
     if not high_overlap_found:
         print("\nNice! All your mutual funds have extremely low portfolio overlaps (< 10%). Your diversification is excellent!")
         print("=" * 100)
+
+    # 8. Write results to Google Sheet
+    try:
+        settings = load_settings(SETTINGS_PATH)
+        sheet_id = settings.google_sheet.spreadsheet_id
+        if sheet_id:
+            log.info("Writing overlap report to Google Sheet spreadsheet ID %s...", sheet_id)
+            writer = OverlapSheetWriter(
+                spreadsheet_id=sheet_id,
+                worksheet_name=OVERLAP_TAB_DEFAULT,
+                credentials_path=CREDENTIALS_PATH,
+                token_path=TOKEN_PATH,
+            )
+            writer.write_overlap_report(active_codes, fund_labels, matrix, sorted_pairs)
+            print(f"\n✅ Portfolio Overlap report successfully written to Google Sheet tab '{OVERLAP_TAB_DEFAULT}'!")
+        else:
+            log.warning("No Google Sheet Spreadsheet ID configured. Skipping Sheet write.")
+    except Exception as e:
+        log.exception("Failed to write Portfolio Overlap report to Google Sheet:")
 
     log.info("Portfolio overlap calculation completed successfully.")
     return 0
