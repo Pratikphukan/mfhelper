@@ -222,10 +222,24 @@ def main(argv: list[str] | None = None) -> int:
         print("-" * 100)
         print(f"{'Stock / Holding Name':<45} | {'Alloc A %':<15} | {'Alloc B %':<15} | {'Overlap Contribution %':<20}")
         print("-" * 100)
-        for d in details[:8]:  # Print top 8 overlapping holdings
+        
+        target_overlap_sum = 0.90 * overlap
+        cumulative_overlap = 0.0
+        top_details = []
+        remaining_details = []
+        
+        for d in details:
+            if cumulative_overlap < target_overlap_sum:
+                top_details.append(d)
+                cumulative_overlap += d["intersection"]
+            else:
+                remaining_details.append(d)
+                
+        for d in top_details:
             print(f"{d['company_name']:<45} | {d['alloc_a']:<15.2f} | {d['alloc_b']:<15.2f} | {d['intersection']:<20.2f}")
-        if len(details) > 8:
-            print(f"...and {len(details) - 8} more overlapping stock(s)")
+        if remaining_details:
+            remaining_names = ", ".join(r["company_name"] for r in remaining_details)
+            print(f"  (Other overlapping stocks: {remaining_names})")
         print("-" * 100)
 
     if not high_overlap_found:

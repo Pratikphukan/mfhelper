@@ -135,16 +135,29 @@ class OverlapSheetWriter:
             detailed_headers_indices.append(len(table) + 1)
             table.append(["Stock / Holding Name", "Allocation in A %", "Allocation in B %", "Overlap Contribution %"])
             
+            target_overlap_sum = 0.90 * overlap
+            cumulative_overlap = 0.0
+            top_details = []
+            remaining_details = []
+            
+            for d in details:
+                if cumulative_overlap < target_overlap_sum:
+                    top_details.append(d)
+                    cumulative_overlap += d["intersection"]
+                else:
+                    remaining_details.append(d)
+            
             # Write top overlapping stocks
-            for d in details[:8]:
+            for d in top_details:
                 table.append([
                     d["company_name"],
                     d["alloc_a"] / 100.0,
                     d["alloc_b"] / 100.0,
                     d["intersection"] / 100.0
                 ])
-            if len(details) > 8:
-                table.append([f"...and {len(details) - 8} more overlapping stock(s)"])
+            if remaining_details:
+                remaining_names = ", ".join(r["company_name"] for r in remaining_details)
+                table.append([f"  (Other overlapping stocks: {remaining_names})"])
                 
             table.append([]) # Spacer row between pairs
             
