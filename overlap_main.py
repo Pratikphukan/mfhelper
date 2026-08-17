@@ -180,10 +180,11 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 100)
     
     # Header row
-    col_width = 15
+    col_width = 18
     sys.stdout.write(f"{'Fund / Code':<20}")
     for code in active_codes:
-        sys.stdout.write(f"| {code:^{col_width}}")
+        short_col_name = fund_labels[code][:15]
+        sys.stdout.write(f"| {short_col_name:^{col_width}}")
     sys.stdout.write("\n" + "-" * (20 + (col_width + 2) * len(active_codes)) + "\n")
     
     # Rows

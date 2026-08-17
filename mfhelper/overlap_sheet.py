@@ -94,7 +94,7 @@ class OverlapSheetWriter:
         # 2. Build the Matrix Headers & Rows
         header_row = ["Fund Name / Code"]
         for code in active_codes:
-            header_row.append(code)
+            header_row.append(fund_labels[code])
         table.append(header_row)
         
         matrix_start_row = len(table) # 1-indexed (row 3 is index 2)
