@@ -15,6 +15,16 @@ jobs:
     - name: Check out repository
       uses: actions/checkout@v4
 
+    - name: Restore Daily NAV State Cache
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          data/last_nav.json
+          data/sheet_columns.json
+        key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
+        restore-keys: |
+          daily-nav-state-
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -43,10 +53,10 @@ jobs:
       run: |
         python main.py
 
-    - name: Commit and Push state changes
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add data/last_nav.json data/sheet_columns.json || true
-        git commit -m "chore: auto-update daily NAV state files [skip ci]" || true
-        git push origin main || true
+    - name: Save Daily NAV State Cache
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          data/last_nav.json
+          data/sheet_columns.json
+        key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
