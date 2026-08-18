@@ -6,8 +6,6 @@ __pycache__/
 
 config/credentials.json
 data/token.json
-data/last_nav.json
-data/sheet_columns.json
 data/fund_returns/
 data/fund_plots/
 data/benchmark_history/
