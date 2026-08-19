@@ -134,7 +134,19 @@ def _fetch_raw(
                 timeout=HTTP_TIMEOUT,
             )
             resp.raise_for_status()
-            inner = resp.json().get("d")
+            try:
+                payload = resp.json()
+            except ValueError as exc:
+                log.warning(
+                    "niftyindices.com returned non-JSON/HTML on attempt %d/%d for %r: %s",
+                    attempt, attempts, name, exc
+                )
+                if attempt < attempts:
+                    sleep_s = backoff_seconds * (2 ** (attempt - 1))
+                    time.sleep(sleep_s)
+                    continue
+                return None
+            inner = payload.get("d")
             if not isinstance(inner, str):
                 log.warning(
                     "niftyindices.com returned an unexpected envelope shape "
