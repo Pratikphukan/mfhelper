@@ -41,7 +41,7 @@ from mfhelper.metrics import (
 from mfhelper.mfapi import MfapiResult, fetch_history as mfapi_fetch_history
 from mfhelper.sheets import NavValue, SheetAppender
 from mfhelper.state import LastNavStore, PrevNav
-from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email
+from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -127,6 +127,7 @@ def run() -> int:
     prev_state = nav_store.load()
 
     all_triggered_alerts = []
+    all_confluence_signals = []
     values_by_code: dict[str, NavValue] = {}
     new_state: dict[str, PrevNav] = dict(prev_state)
     missing_codes: list[str] = []
@@ -216,6 +217,19 @@ def run() -> int:
             all_triggered_alerts.extend(triggered)
             log.info("  [ALERT] Triggered %d indicator alert(s) for %s", len(triggered), fund.code)
 
+        # Check for confluence dip-buying opportunities
+        confluence = check_confluence_signal(
+            scheme_code=fund.code,
+            fund_name=display_names[fund.code],
+            current_rsi=rsi_value,
+            current_dist_52w=dist_52w_pct,
+            current_dist_200d_sma=dist_200d_sma_pct,
+            rules=alert_settings.rules,
+        )
+        if confluence:
+            all_confluence_signals.append(confluence)
+            log.info("  [CONFLUENCE] Triggered Tier-%d buy signal for %s", confluence.tier, fund.code)
+
     for code in ordered_codes:
         if code not in display_names:
             existing_fund = fund_by_code.get(code)
@@ -275,7 +289,7 @@ def run() -> int:
     )
 
     # Dispatch indicator alerts email digest if any are triggered
-    dispatch_alerts_email(all_triggered_alerts, alert_settings.email)
+    dispatch_alerts_email(all_triggered_alerts, alert_settings.email, all_confluence_signals)
 
     if fallback_codes:
         log.info(

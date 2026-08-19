@@ -27,6 +27,89 @@ class TriggeredAlert:
     action_suggestion: str
 
 
+@dataclass(frozen=True)
+class DipBuyingSignal:
+    scheme_code: str
+    fund_name: str
+    tier: int               # 1, 2, or 3
+    reasons: list[str]      # e.g., ["RSI is 32.5 (Oversold)", "52W Drop is -22.4% (Deep)"]
+    suggestion: str
+    groww_link: str         # Direct buy button link
+
+
+def check_confluence_signal(
+    scheme_code: str,
+    fund_name: str,
+    current_rsi: float | None,
+    current_dist_52w: float | None,
+    current_dist_200d_sma: float | None,
+    rules: AlertRulesConfig,
+) -> DipBuyingSignal | None:
+    """Check today's indicators for a single fund to see if they form a confluent buying signal."""
+    import urllib.parse
+    groww_query = urllib.parse.quote_plus(fund_name)
+    groww_link = f"https://groww.in/mutual-funds/search?q={groww_query}"
+
+    # Tier 3 (Deep/Strong Buy)
+    t3_reasons = []
+    if current_rsi is not None and current_rsi <= rules.rsi_deep_oversold:
+        t3_reasons.append(f"RSI is {current_rsi:.2f} (Deeply Oversold)")
+    if current_dist_200d_sma is not None and current_dist_200d_sma <= rules.sma_deep_capitulation_pct:
+        t3_reasons.append(f"200D SMA is {current_dist_200d_sma:.2f}% (Capitulation)")
+    if current_dist_52w is not None and current_dist_52w <= rules.discount_deep_pct:
+        t3_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Deep Discount)")
+
+    if len(t3_reasons) >= 2:
+        return DipBuyingSignal(
+            scheme_code=scheme_code,
+            fund_name=fund_name,
+            tier=3,
+            reasons=t3_reasons,
+            suggestion="Strong Confluence Buy. Fund is highly oversold and deeply discounted from peak. Suggesting aggressive lumpsum top-up.",
+            groww_link=groww_link,
+        )
+
+    # Tier 2 (Moderate Buy)
+    t2_reasons = []
+    if current_rsi is not None and current_rsi <= rules.rsi_moderate_dip:
+        t2_reasons.append(f"RSI is {current_rsi:.2f} (Moderate Dip)")
+    if current_dist_200d_sma is not None and current_dist_200d_sma <= rules.sma_moderate_discount_pct:
+        t2_reasons.append(f"200D SMA is {current_dist_200d_sma:.2f}% (Support Discount)")
+    if current_dist_52w is not None and current_dist_52w <= rules.discount_moderate_pct:
+        t2_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Moderate Discount)")
+
+    if len(t2_reasons) >= 2:
+        return DipBuyingSignal(
+            scheme_code=scheme_code,
+            fund_name=fund_name,
+            tier=2,
+            reasons=t2_reasons,
+            suggestion="Moderate Confluence Buy. Solid support dip. Suggesting moderate lumpsum or increased SIP multiplier.",
+            groww_link=groww_link,
+        )
+
+    # Tier 1 (Mild Pullback Buy)
+    t1_reasons = []
+    if current_rsi is not None and current_rsi <= rules.rsi_mild_pullback:
+        t1_reasons.append(f"RSI is {current_rsi:.2f} (Mild Pullback)")
+    if current_dist_200d_sma is not None and (current_dist_200d_sma <= rules.sma_trend_support_pct or abs(current_dist_200d_sma) <= rules.sma_trend_support_pct):
+        t1_reasons.append(f"200D SMA is {current_dist_200d_sma:.2f}% (Trend Support)")
+    if current_dist_52w is not None and current_dist_52w <= rules.discount_mild_pct:
+        t1_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Mild Discount)")
+
+    if len(t1_reasons) >= 2:
+        return DipBuyingSignal(
+            scheme_code=scheme_code,
+            fund_name=fund_name,
+            tier=1,
+            reasons=t1_reasons,
+            suggestion="Mild Confluence Pullback. Healthy consolidation. Suggesting standard top-up.",
+            groww_link=groww_link,
+        )
+
+    return None
+
+
 def check_fund_alerts(
     scheme_code: str,
     fund_name: str,
@@ -185,6 +268,7 @@ def check_fund_alerts(
 def dispatch_alerts_email(
     alerts: list[TriggeredAlert],
     email_config: AlertEmailConfig,
+    confluence_signals: list[DipBuyingSignal] | None = None,
 ) -> bool:
     """Send a beautifully formatted HTML alert digest via SMTP."""
     if not email_config.enable:
@@ -215,6 +299,54 @@ def dispatch_alerts_email(
     msg["Subject"] = f"🚨 MFHelper Technical Buy/Sell Alerts: {len(alerts)} Trigger(s)"
     msg["From"] = sender
     msg["To"] = receiver
+
+    briefing_html = ""
+    if confluence_signals:
+        briefing_html = """
+        <div style="background-color: #fdfefe; border: 1px solid #c3e6cb; border-radius: 6px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <h3 style="color: #155724; margin-top: 0; display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+               🚨 PORTFOLIO DIP-BUYING INTELLIGENCE BRIEFING
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 15px; width: 100%;">
+        """
+        for sig in confluence_signals:
+            if sig.tier == 3:
+                badge = '<span style="background-color: #f8d7da; color: #721c24; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">BUY TIER 3 (STRONG)</span>'
+                border_color = "#f5c6cb"
+                card_bg = "#fdf3f2"
+            elif sig.tier == 2:
+                badge = '<span style="background-color: #fff3cd; color: #856404; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">BUY TIER 2 (MODERATE)</span>'
+                border_color = "#ffeeba"
+                card_bg = "#fffdf0"
+            else:
+                badge = '<span style="background-color: #d1ecf1; color: #0c5460; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">BUY TIER 1 (MILD)</span>'
+                border_color = "#bee5eb"
+                card_bg = "#f4fafd"
+                
+            reasons_str = ", ".join(sig.reasons)
+            briefing_html += f"""
+                <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
+                    <div style="margin-bottom: 8px;">
+                        <span style="font-weight: bold; font-size: 15px; color: #212529; vertical-align: middle; margin-right: 8px;">{sig.fund_name}</span>
+                        {badge}
+                    </div>
+                    <div style="font-size: 12px; color: #6c757d; line-height: 1.4; margin-bottom: 6px;">
+                        <strong>Triggered by confluences:</strong> {reasons_str}
+                    </div>
+                    <div style="font-size: 13px; color: #212529; line-height: 1.5; margin-top: 6px; font-style: italic;">
+                        <strong>Action Suggestion:</strong> {sig.suggestion}
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <a href="{sig.groww_link}" target="_blank" style="background-color: #155724; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-block;">
+                            🛒 BUY ON GROWW
+                        </a>
+                    </div>
+                </div>
+            """
+        briefing_html += """
+            </div>
+        </div>
+        """
 
     rows_html = ""
     for alt in alerts:
@@ -261,6 +393,7 @@ def dispatch_alerts_email(
             <p style="color: #495057; line-height: 1.6;">
                 The daily NAV scheduler has successfully completed. Below are the mutual funds that have broken configured technical support levels or buy/sell zones today:
             </p>
+            {briefing_html}
             <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px;">
                 <thead>
                     <tr style="background-color: #343a40; color: #ffffff; text-align: left;">
