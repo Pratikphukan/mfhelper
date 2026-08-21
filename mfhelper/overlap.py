@@ -68,7 +68,7 @@ def fetch_isin_from_amfi(codes: list[str]) -> tuple[dict[str, str], dict[str, st
     
     for line in r.text.splitlines():
         parts = line.strip().split(";")
-        if len(parts) == 6:
+        if len(parts) >= 6:
             c = parts[0].strip()
             if c in codes:
                 code_to_isin[c] = parts[1].strip().upper()

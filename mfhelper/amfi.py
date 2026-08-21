@@ -48,15 +48,15 @@ def parse_nav_text(text: str) -> dict[str, NavRecord]:
         if not line:
             continue
         parts = line.split(";")
-        if len(parts) != 6:
+        if len(parts) < 6:
             continue
         scheme_code = parts[0].strip()
         if not scheme_code.isdigit():
             continue
 
         scheme_name = parts[3].strip()
-        nav_str = parts[4].strip()
-        date_str = parts[5].strip()
+        nav_str = parts[-2].strip()
+        date_str = parts[-1].strip()
 
         try:
             nav = float(nav_str)
