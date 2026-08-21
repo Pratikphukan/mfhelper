@@ -9,7 +9,7 @@ google_sheet:
 # --- Rolling window ------------------------------------------------------
 # Maximum number of distinct run-dates to keep in the sheet.
 # After each append, rows older than this many run-dates are deleted.
-history_days: 30
+history_days: 60
 
 # --- Timezone for run timestamps in the sheet ----------------------------
 timezone: "Asia/Kolkata"
