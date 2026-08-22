@@ -2,7 +2,8 @@
 
 Parses all processed JSON metrics inside ``data/fund_returns/`` and compiles
 them into a self-contained, responsive ``dashboard.html`` webpage with
-interactive charts (Risk vs Return, SIP Returns, Sharpe/Sortino/Calmar Ratios).
+interactive charts and an ultra-premium slide-over exploration panel displaying
+trailing, calendar-year, financial-year, and rolling returns.
 """
 
 from __future__ import annotations
@@ -54,47 +55,16 @@ def main() -> int:
         print("\n❌ Error: No fund returns JSON files found! Please run 'returns_main.py' first to generate your performance data.")
         return 2
 
-    # 1. Parse and Aggregate the fund datasets
+    # 1. Parse and Aggregate the fund datasets (Injecting full raw JSON structures!)
     aggregated_data = []
     
     for jf in json_files:
         try:
             with jf.open("r", encoding="utf-8") as f:
                 fund_data = json.load(f)
-                
-            tr = fund_data.get("trailing_returns") or {}
-            sip = fund_data.get("hypothetical_sip_xirr") or {}
-            risk = fund_data.get("risk") or {}
-            ra = fund_data.get("risk_adjusted") or {}
-            
-            # Pack metrics, defaulting to None if missing so JavaScript can handle them gracefully
-            aggregated_data.append({
-                "code": fund_data.get("scheme_code"),
-                "name": fund_data.get("scheme_name", "?"),
-                "nav": fund_data.get("history", {}).get("latest_nav"),
-                "as_of": fund_data.get("history", {}).get("latest_nav_date"),
-                
-                # Trailing returns
-                "ret_1y": tr.get("1y_abs_pct"),
-                "ret_3y": tr.get("3y_cagr_pct"),
-                "ret_5y": tr.get("5y_cagr_pct"),
-                "ret_10y": tr.get("10y_cagr_pct"),
-                "ret_inception": tr.get("since_inception_cagr_pct"),
-                
-                # SIP returns
-                "sip_3y": sip.get("3y_xirr_pct"),
-                "sip_5y": sip.get("5y_xirr_pct"),
-                "sip_10y": sip.get("10y_xirr_pct"),
-                
-                # Volatility/Risk
-                "sd_3y": risk.get("sd_3y_pct"),
-                
-                # Performance Ratios
-                "sharpe_3y": ra.get("sharpe_3y"),
-                "sortino_3y": ra.get("sortino_3y"),
-                "calmar_3y": ra.get("calmar_3y"),
-            })
-            log.info("Successfully loaded data for: %s", fund_data.get("scheme_name"))
+            # Inject the entire fund data dict so the UI has access to all statistics
+            aggregated_data.append(fund_data)
+            log.info("Successfully loaded full data structure for: %s", fund_data.get("scheme_name"))
         except Exception as e:
             log.warning("Failed to parse fund returns file %s: %s", jf, e)
 
@@ -103,7 +73,7 @@ def main() -> int:
         return 2
 
     # Sort funds alphabetically by name for clean displays
-    aggregated_data.sort(key=lambda x: x["name"])
+    aggregated_data.sort(key=lambda x: x.get("scheme_name", ""))
 
     # 2. Build the beautiful self-contained HTML String
     html_template = f"""<!DOCTYPE html>
@@ -124,7 +94,7 @@ def main() -> int:
         }}
     </style>
 </head>
-<body class="text-slate-800 antialiased min-h-screen">
+<body class="text-slate-800 antialiased min-h-screen relative overflow-x-hidden">
 
     <div class="max-w-[1400px] mx-auto p-4 md:p-8">
         
@@ -132,7 +102,7 @@ def main() -> int:
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6 mb-8">
             <div>
                 <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">📈 MFHelper Portfolio Dashboard</h1>
-                <p class="text-slate-500 mt-1 text-sm">Interactive performance & risk metrics analyzer across all mutual funds</p>
+                <p class="text-slate-500 mt-1 text-sm">Interactive performance & risk metrics analyzer across all mutual funds. Click any row in the table below to explore its nested yearly and rolling returns!</p>
             </div>
             <div class="bg-white border border-slate-200 px-4 py-3 rounded-xl shadow-sm text-right">
                 <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Last updated (IST)</div>
@@ -216,7 +186,7 @@ def main() -> int:
         <section class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
             <div class="px-6 py-5 border-b border-slate-200 bg-slate-50/50">
                 <h3 class="text-lg font-bold text-slate-900">📋 Complete Portfolio Statistics Grid</h3>
-                <p class="text-xs text-slate-400 font-semibold mt-0.5">Double-check and audit the exact numerical statistics calculated across all mutual fund portfolios</p>
+                <p class="text-xs text-slate-400 font-semibold mt-0.5">Click on any fund row below to slide open a comprehensive year-by-year and rolling returns audit panel!</p>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse text-sm">
@@ -234,13 +204,39 @@ def main() -> int:
                             <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">Calmar (3Y)</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100 text-slate-700 font-medium">
+                    <tbody id="stats-table-body" class="divide-y divide-slate-100 text-slate-700 font-medium cursor-pointer">
                         <!-- Javascript will dynamically build row content here -->
                     </tbody>
                 </table>
             </div>
         </section>
 
+    </div>
+
+    <!-- Premium Slide-over Side Panel -->
+    <div id="modal-container" class="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex justify-end opacity-0 pointer-events-none transition-opacity duration-300">
+        <div id="modal-panel" class="w-full max-w-2xl bg-white h-screen shadow-2xl flex flex-col translate-x-full transition-transform duration-300 ease-out border-l border-slate-200">
+            <!-- Modal Header -->
+            <div class="p-6 border-b border-slate-200 flex justify-between items-start bg-slate-50">
+                <div>
+                    <h3 id="modal-fund-name" class="text-xl font-bold text-slate-900 leading-tight pr-4">Fund Details</h3>
+                    <span id="modal-fund-code" class="text-xs font-bold text-slate-400 mt-1 block uppercase tracking-wider">AMFI: -</span>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 p-2 rounded-lg focus:outline-none transition-all">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <!-- Modal Tabs -->
+            <div class="px-6 border-b border-slate-200 flex gap-6 text-sm font-bold text-slate-400 bg-slate-50/50">
+                <button id="tab-btn-trailing" onclick="switchTab('trailing')" class="py-4 border-b-2 border-emerald-600 text-emerald-600 focus:outline-none transition-all">Trailing & Extremes</button>
+                <button id="tab-btn-yearly" onclick="switchTab('yearly')" class="py-4 border-b-2 border-transparent hover:text-slate-600 focus:outline-none transition-all">Yearly Returns</button>
+                <button id="tab-btn-rolling" onclick="switchTab('rolling')" class="py-4 border-b-2 border-transparent hover:text-slate-600 focus:outline-none transition-all">Rolling Analysis</button>
+            </div>
+            <!-- Modal Content -->
+            <div class="flex-grow p-6 overflow-y-auto bg-white" id="modal-content">
+                <!-- Dynamically populated tab content -->
+            </div>
+        </div>
     </div>
 
     <!-- Data Injection -->
@@ -250,7 +246,7 @@ def main() -> int:
 
     <script>
         const dataset = JSON.parse(document.getElementById('portfolio-data').textContent);
-        console.log("Loaded dataset size:", dataset.length);
+        console.log("Loaded full dataset records:", dataset.length);
 
         // --- Helper formatting ---
         const fmtPct = (val) => (val !== null && val !== undefined) ? `${{val.toFixed(2)}}%` : 'n/a';
@@ -263,17 +259,22 @@ def main() -> int:
         let lowestSd = Infinity, lowestSdName = '-';
 
         dataset.forEach(fund => {{
-            if (fund.ret_3y && fund.ret_3y > topCagr) {{
-                topCagr = fund.ret_3y; topCagrName = fund.name;
+            const tr = fund.trailing_returns || {{}};
+            const sip = fund.hypothetical_sip_xirr || {{}};
+            const risk = fund.risk || {{}};
+            const ra = fund.risk_adjusted || {{}};
+
+            if (tr.3y_cagr_pct && tr.3y_cagr_pct > topCagr) {{
+                topCagr = tr.3y_cagr_pct; topCagrName = fund.scheme_name;
             }}
-            if (fund.sip_3y && fund.sip_3y > topSip) {{
-                topSip = fund.sip_3y; topSipName = fund.name;
+            if (sip.3y_xirr_pct && sip.3y_xirr_pct > topSip) {{
+                topSip = sip.3y_xirr_pct; topSipName = fund.scheme_name;
             }}
-            if (fund.sharpe_3y && fund.sharpe_3y > topSharpe) {{
-                topSharpe = fund.sharpe_3y; topSharpeName = fund.name;
+            if (ra.sharpe_3y && ra.sharpe_3y > topSharpe) {{
+                topSharpe = ra.sharpe_3y; topSharpeName = fund.scheme_name;
             }}
-            if (fund.sd_3y && fund.sd_3y < lowestSd) {{
-                lowestSd = fund.sd_3y; lowestSdName = fund.name;
+            if (risk.sd_3y_pct && risk.sd_3y_pct < lowestSd) {{
+                lowestSd = risk.sd_3y_pct; lowestSdName = fund.scheme_name;
             }}
         }});
 
@@ -295,35 +296,41 @@ def main() -> int:
         }}
 
         // --- Populate Table ---
-        const tbody = document.querySelector('tbody');
-        dataset.forEach(fund => {{
-            const tr = document.createElement('tr');
-            tr.className = 'hover:bg-slate-50/50 transition-colors';
-            tr.innerHTML = `
+        const tbody = document.getElementById('stats-table-body');
+        dataset.forEach((fund, index) => {{
+            const tr = fund.trailing_returns || {{}};
+            const sip = fund.hypothetical_sip_xirr || {{}};
+            const risk = fund.risk || {{}};
+            const ra = fund.risk_adjusted || {{}};
+
+            const rowElement = document.createElement('tr');
+            rowElement.className = 'hover:bg-slate-50/50 transition-colors border-b border-slate-100';
+            rowElement.onclick = () => openModal(index);
+            rowElement.innerHTML = `
                 <td class="py-3 px-4 font-bold text-slate-800">
-                    <div class="truncate max-w-[320px]">${{fund.name}}</div>
-                    <span class="text-xs text-slate-400 font-semibold">AMFI: ${{fund.code}}</span>
+                    <div class="truncate max-w-[320px]">${{fund.scheme_name}}</div>
+                    <span class="text-xs text-slate-400 font-bold uppercase">AMFI: ${{fund.scheme_code}}</span>
                 </td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(fund.ret_1y)}}</td>
-                <td class="py-3 px-4 text-center font-bold text-slate-900">${{fmtPct(fund.ret_3y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(fund.ret_5y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(fund.sip_3y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(fund.sip_5y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(fund.sd_3y)}}</td>
-                <td class="py-3 px-4 text-center font-bold text-amber-700">${{fmtNum(fund.sharpe_3y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(fund.sortino_3y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(fund.calmar_3y)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr.1y_abs_pct)}}</td>
+                <td class="py-3 px-4 text-center font-bold text-slate-900">${{fmtPct(tr.3y_cagr_pct)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr.5y_cagr_pct)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip.3y_xirr_pct)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip.5y_xirr_pct)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(risk.sd_3y_pct)}}</td>
+                <td class="py-3 px-4 text-center font-bold text-amber-700">${{fmtNum(ra.sharpe_3y)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra.sortino_3y)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra.calmar_3y)}}</td>
             `;
-            tbody.appendChild(tr);
+            tbody.appendChild(rowElement);
         }});
 
         // --- CHART 1: Efficient Frontier (Scatter Plot) ---
         const scatterData = dataset
-            .filter(f => f.sd_3y !== null && f.ret_3y !== null)
+            .filter(f => f.risk?.sd_3y_pct !== undefined && f.trailing_returns?.3y_cagr_pct !== undefined)
             .map(f => ({{
-                x: f.sd_3y,
-                y: f.ret_3y,
-                label: f.name
+                x: f.risk.sd_3y_pct,
+                y: f.trailing_returns.3y_cagr_pct,
+                label: f.scheme_name
             }}));
 
         new Chart(document.getElementById('chart-frontier'), {{
@@ -365,10 +372,10 @@ def main() -> int:
         }});
 
         // --- CHART 2: Risk-Adjusted Quality Scores ---
-        const ratioLabels = dataset.map(f => f.name.substring(0, 15) + '...');
-        const sharpeSeries = dataset.map(f => f.sharpe_3y);
-        const sortinoSeries = dataset.map(f => f.sortino_3y);
-        const calmarSeries = dataset.map(f => f.calmar_3y);
+        const ratioLabels = dataset.map(f => f.scheme_name.substring(0, 15) + '...');
+        const sharpeSeries = dataset.map(f => f.risk_adjusted?.sharpe_3y);
+        const sortinoSeries = dataset.map(f => f.risk_adjusted?.sortino_3y);
+        const calmarSeries = dataset.map(f => f.risk_adjusted?.calmar_3y);
 
         new Chart(document.getElementById('chart-ratios'), {{
             type: 'bar',
@@ -394,10 +401,10 @@ def main() -> int:
         }});
 
         // --- CHART 3: SIP Performance ---
-        const sipLabels = dataset.map(f => f.name.substring(0, 20) + '...');
-        const sip3ySeries = dataset.map(f => f.sip_3y);
-        const sip5ySeries = dataset.map(f => f.sip_5y);
-        const sip10ySeries = dataset.map(f => f.sip_10y);
+        const sipLabels = dataset.map(f => f.scheme_name.substring(0, 20) + '...');
+        const sip3ySeries = dataset.map(f => f.hypothetical_sip_xirr?.3y_xirr_pct);
+        const sip5ySeries = dataset.map(f => f.hypothetical_sip_xirr?.5y_xirr_pct);
+        const sip10ySeries = dataset.map(f => f.hypothetical_sip_xirr?.10y_xirr_pct);
 
         new Chart(document.getElementById('chart-sip'), {{
             type: 'bar',
@@ -425,6 +432,171 @@ def main() -> int:
                 }}
             }}
         }});
+
+        // --- SLIDE-OVER EXPLORATION MODAL LOGIC ---
+        let selectedFundIndex = null;
+        let activeTab = 'trailing';
+
+        function openModal(index) {{
+            selectedFundIndex = index;
+            const fund = dataset[index];
+            
+            document.getElementById('modal-fund-name').textContent = fund.scheme_name;
+            document.getElementById('modal-fund-code').textContent = `AMFI: ${{fund.scheme_code}} | Data Source: ${{fund.data_source}}`;
+            
+            // Show Container with fade and Slide Panel with translate
+            const container = document.getElementById('modal-container');
+            const panel = document.getElementById('modal-panel');
+            
+            container.classList.remove('opacity-0', 'pointer-events-none');
+            panel.classList.remove('translate-x-full');
+            
+            // Render default tab
+            switchTab('trailing');
+        }}
+
+        function closeModal() {{
+            const container = document.getElementById('modal-container');
+            const panel = document.getElementById('modal-panel');
+            
+            container.classList.add('opacity-0', 'pointer-events-none');
+            panel.classList.add('translate-x-full');
+        }}
+
+        // Close on background click
+        document.getElementById('modal-container').onclick = function(e) {{
+            if (e.target === this) closeModal();
+        }};
+
+        function switchTab(tabName) {{
+            activeTab = tabName;
+            
+            // Update tab button styles
+            const tabs = ['trailing', 'yearly', 'rolling'];
+            tabs.forEach(t => {{
+                const btn = document.getElementById(`tab-btn-${{t}}`);
+                if (t === tabName) {{
+                    btn.className = "py-4 border-b-2 border-emerald-600 text-emerald-600 focus:outline-none font-extrabold";
+                }} else {{
+                    btn.className = "py-4 border-b-2 border-transparent text-slate-400 hover:text-slate-600 focus:outline-none";
+                }}
+            }});
+            
+            const fund = dataset[selectedFundIndex];
+            const contentDiv = document.getElementById('modal-content');
+            
+            if (tabName === 'trailing') {{
+                const tr = fund.trailing_returns || {{}};
+                const ex = fund.extremes || {{}};
+                contentDiv.innerHTML = `
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="text-sm font-bold uppercase text-slate-400 tracking-wider mb-3">Trailing Returns Summary</h4>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Week return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.1w_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Month return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.1m_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">3-Month return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.3m_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Year return (Abs)</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.1y_abs_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">3-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr.3y_cagr_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">5-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr.5y_cagr_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">10-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr.10y_cagr_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">Since Inception CAGR</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.since_inception_cagr_pct)}}</div></div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold uppercase text-slate-400 tracking-wider mb-3">Extremes & Anomalies</h4>
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center py-2.5 px-4 bg-emerald-50 text-emerald-800 rounded-lg"><span class="font-bold">🚀 Best Single Day</span><span class="font-extrabold">${{fmtPct(ex.best_day_pct)}} (${{ex.best_day_date || 'n/a'}})</span></div>
+                                <div class="flex justify-between items-center py-2.5 px-4 bg-rose-50 text-rose-800 rounded-lg"><span class="font-bold">⚠️ Worst Single Day</span><span class="font-extrabold">${{fmtPct(ex.worst_day_pct)}} (${{ex.worst_day_date || 'n/a'}})</span></div>
+                                <div class="flex justify-between items-center py-2.5 px-4 bg-emerald-50 text-emerald-800 rounded-lg"><span class="font-bold">📈 Best Single Month</span><span class="font-extrabold">${{fmtPct(ex.best_month_pct)}} (${{ex.best_month_date || 'n/a'}})</span></div>
+                                <div class="flex justify-between items-center py-2.5 px-4 bg-rose-50 text-rose-800 rounded-lg"><span class="font-bold">📉 Worst Single Month</span><span class="font-extrabold">${{fmtPct(ex.worst_month_pct)}} (${{ex.worst_month_date || 'n/a'}})</span></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }} else if (tabName === 'yearly') {{
+                const cy = fund.calendar_year_returns || {{}};
+                const fy = fund.financial_year_returns || {{}};
+                
+                let cyRows = '';
+                Object.keys(cy).sort().reverse().forEach(year => {{
+                    const label = year.includes('ytd') ? 'Current YTD' : year.replace('_pct', '');
+                    const val = cy[year];
+                    const colorClass = val >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                    cyRows += `<tr class="border-b border-slate-100"><td class="py-2.5 font-bold">${{label}}</td><td class="py-2.5 text-right font-extrabold ${{colorClass}}">${{fmtPct(val)}}</td></tr>`;
+                }});
+                
+                let fyRows = '';
+                Object.keys(fy).sort().reverse().forEach(year => {{
+                    const label = year.includes('ytd') ? 'Current FY YTD' : year.replace('_pct', '').toUpperCase();
+                    const val = fy[year];
+                    const colorClass = val >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                    fyRows += `<tr class="border-b border-slate-100"><td class="py-2.5 font-bold">${{label}}</td><td class="py-2.5 text-right font-extrabold ${{colorClass}}">${{fmtPct(val)}}</td></tr>`;
+                }});
+
+                contentDiv.innerHTML = `
+                    <div class="grid grid-cols-2 gap-8 h-full">
+                        <div>
+                            <h4 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">Calendar Year Returns</h4>
+                            <div class="max-h-[350px] overflow-y-auto pr-2">
+                                <table class="w-full text-sm">
+                                    <tbody class="divide-y divide-slate-100">
+                                        ${{cyRows || '<tr><td class="py-4 text-slate-400 text-center font-bold">No calendar year history</td></tr>'}}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">Financial Year Returns</h4>
+                            <div class="max-h-[350px] overflow-y-auto pr-2">
+                                <table class="w-full text-sm">
+                                    <tbody class="divide-y divide-slate-100">
+                                        ${{fyRows || '<tr><td class="py-4 text-slate-400 text-center font-bold">No financial year history</td></tr>'}}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }} else if (tabName === 'rolling') {{
+                const rr = fund.rolling_returns || {{}};
+                let cardsHtml = '';
+                
+                Object.keys(rr).sort().forEach(winKey => {{
+                    const win = rr[winKey];
+                    if (!win) return;
+                    
+                    const label = winKey.replace('y_window', '-Year');
+                    cardsHtml += `
+                        <div class="border border-slate-200 bg-slate-50/50 p-5 rounded-2xl">
+                            <h5 class="font-extrabold text-sm text-slate-800 border-b border-slate-200 pb-2 mb-3">🔄 Rolling ${{label}} Distribution</h5>
+                            <div class="grid grid-cols-2 gap-3 text-xs font-bold text-slate-600">
+                                <div>Total Windows: <span class="text-slate-800 font-black">${{win.samples}}</span></div>
+                                <div>Average CAGR: <span class="text-emerald-600 font-black">${{fmtPct(win.mean_pct)}}</span></div>
+                                <div>Minimum CAGR: <span class="text-rose-500 font-black">${{fmtPct(win.min_pct)}}</span></div>
+                                <div>Maximum CAGR: <span class="text-emerald-500 font-black">${{fmtPct(win.max_pct)}}</span></div>
+                                <div>25th Percentile: <span class="text-slate-700 font-black">${{fmtPct(win.p25_pct)}}</span></div>
+                                <div>75th Percentile: <span class="text-slate-700 font-black">${{fmtPct(win.p75_pct)}}</span></div>
+                                <div>Median CAGR: <span class="text-emerald-600 font-black">${{fmtPct(win.median_pct)}}</span></div>
+                                <div>Negative Windows: <span class="font-black ${{win.pct_negative > 0 ? "text-rose-600" : "text-emerald-600"}}">${{win.pct_negative.toFixed(2)}}%</span></div>
+                            </div>
+                            <div class="mt-3 bg-emerald-50 text-emerald-800 py-1.5 px-3 rounded-lg text-xs font-black flex justify-between">
+                                <span>🚀 Windows outperforming > 12%:</span>
+                                <span>${{win.pct_above_12.toFixed(2)}}%</span>
+                            </div>
+                        </div>
+                    `;
+                }});
+                
+                contentDiv.innerHTML = `
+                    <div class="space-y-6">
+                        <div class="space-y-4">
+                            ${{cardsHtml || '<p class="text-slate-400 text-center font-bold">No rolling window metrics available</p>'}}
+                        </div>
+                    </div>
+                `;
+            }}
+        }}
     </script>
 </body>
 </html>
@@ -433,8 +605,8 @@ def main() -> int:
     try:
         OUTPUT_FILE_PATH.write_text(html_template, encoding="utf-8")
         print("\n" + "=" * 110)
-        print(f"🎉 SUCCESS! Interactive performance & risk dashboard successfully generated at: {OUTPUT_FILE_PATH}")
-        print("Double-click the 'dashboard.html' file on your Mac to explore your mutual funds interactively!")
+        print(f"🎉 SUCCESS! Super-premium interactive dashboard successfully generated at: {OUTPUT_FILE_PATH}")
+        print("Double-click the 'dashboard.html' file on your Mac to explore trailing, yearly, and rolling returns!")
         print("=" * 110 + "\n")
         log.info("Interactive Dashboard successfully written to %s", OUTPUT_FILE_PATH)
         return 0
