@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MFHelper Mutual Fund Performance Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen">
+
+    <div class="max-w-[1400px] mx-auto p-4 md:p-8">
+        
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6 mb-8">
+            <div>
+                <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">📈 MFHelper Portfolio Dashboard</h1>
+                <p class="text-slate-500 mt-1 text-sm">Interactive performance & risk metrics analyzer across all mutual funds</p>
+            </div>
+            <div class="bg-white border border-slate-200 px-4 py-3 rounded-xl shadow-sm text-right">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Last updated (IST)</div>
+                <div class="text-sm font-bold text-slate-700 mt-0.5">2026-08-22 14:29:57</div>
+            </div>
+        </header>
+
+        <!-- KPI Cards Grid -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <!-- Card 1 -->
+            <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Top 3Y CAGR Return</span>
+                <div class="mt-2">
+                    <span class="text-2xl font-black text-emerald-600" id="kpi-top-cagr">n/a</span>
+                    <p class="text-xs text-slate-500 font-semibold mt-1 truncate" id="kpi-top-cagr-name">-</p>
+                </div>
+            </div>
+            <!-- Card 2 -->
+            <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Highest 3Y SIP XIRR</span>
+                <div class="mt-2">
+                    <span class="text-2xl font-black text-indigo-600" id="kpi-top-sip">n/a</span>
+                    <p class="text-xs text-slate-500 font-semibold mt-1 truncate" id="kpi-top-sip-name">-</p>
+                </div>
+            </div>
+            <!-- Card 3 -->
+            <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Best Sharpe Ratio (3Y)</span>
+                <div class="mt-2">
+                    <span class="text-2xl font-black text-amber-600" id="kpi-top-sharpe">n/a</span>
+                    <p class="text-xs text-slate-500 font-semibold mt-1 truncate" id="kpi-top-sharpe-name">-</p>
+                </div>
+            </div>
+            <!-- Card 4 -->
+            <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Lowest Volatility (3Y SD)</span>
+                <div class="mt-2">
+                    <span class="text-2xl font-black text-cyan-600" id="kpi-lowest-sd">n/a</span>
+                    <p class="text-xs text-slate-500 font-semibold mt-1 truncate" id="kpi-lowest-sd-name">-</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Grid Layout -->
+        <main class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+            <!-- Left Side: Scatter Plot (The Efficient Frontier) -->
+            <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm lg:col-span-7 flex flex-col">
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold text-slate-900">🎯 The Efficient Frontier</h3>
+                    <p class="text-xs text-slate-400 font-semibold mt-0.5">Visualizes Volatility (Risk) on X-axis vs. 3Y CAGR (Return) on Y-axis. Top-left is optimal.</p>
+                </div>
+                <div class="relative h-[400px] w-full flex-grow flex items-center justify-center">
+                    <canvas id="chart-frontier"></canvas>
+                </div>
+            </div>
+
+            <!-- Right Side: Risk Ratios -->
+            <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm lg:col-span-5 flex flex-col">
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold text-slate-900">🛡️ Risk-Adjusted Quality Scores</h3>
+                    <p class="text-xs text-slate-400 font-semibold mt-0.5">Compares Sharpe, Sortino, and Calmar ratios. Higher scores signify better risk-adjusted return efficiency.</p>
+                </div>
+                <div class="relative h-[400px] w-full flex-grow flex items-center justify-center">
+                    <canvas id="chart-ratios"></canvas>
+                </div>
+            </div>
+
+            <!-- Full Width: SIP XIRR Grouped Bar Chart -->
+            <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm lg:col-span-12">
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold text-slate-900">🛒 SIP Performance Comparison</h3>
+                    <p class="text-xs text-slate-400 font-semibold mt-0.5">Compares the true annualized rate of return (XIRR) of a monthly ₹10,000 SIP across 3Y, 5Y, and 10Y horizons.</p>
+                </div>
+                <div class="relative h-[380px] w-full">
+                    <canvas id="chart-sip"></canvas>
+                </div>
+            </div>
+        </main>
+
+        <!-- Tabular Grid View -->
+        <section class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">
+            <div class="px-6 py-5 border-b border-slate-200 bg-slate-50/50">
+                <h3 class="text-lg font-bold text-slate-900">📋 Complete Portfolio Statistics Grid</h3>
+                <p class="text-xs text-slate-400 font-semibold mt-0.5">Double-check and audit the exact numerical statistics calculated across all mutual fund portfolios</p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100 text-slate-500 uppercase text-xs font-bold tracking-wider border-b border-slate-200">
+                            <th class="py-3.5 px-4 font-extrabold text-slate-600">Fund Name / Code</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">1Y Abs</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">3Y CAGR</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">5Y CAGR</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">3Y SIP XIRR</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">5Y SIP XIRR</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">Ann. SD (3Y)</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">Sharpe (3Y)</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">Sortino (3Y)</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">Calmar (3Y)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700 font-medium">
+                        <!-- Javascript will dynamically build row content here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Data Injection -->
+    <script id="portfolio-data" type="application/json">
+        [{"code": "148485", "name": "Axis Global Equity Alpha Fund of Fund - Direct Plan - Growth Option", "nav": 26.9285, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 24.91, "ret_5y": 15.86, "ret_10y": null, "ret_inception": 18.31, "sip_3y": 25.61, "sip_5y": 21.58, "sip_10y": null, "sd_3y": null, "sharpe_3y": 1.17, "sortino_3y": 1.09, "calmar_3y": 1.32}, {"code": "147946", "name": "Bandhan Small Cap Fund Direct Growth", "nav": 56.629, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 26.95, "ret_5y": 20.82, "ret_10y": null, "ret_inception": 30.68, "sip_3y": 17.85, "sip_5y": 23.25, "sip_10y": null, "sd_3y": null, "sharpe_3y": 1.13, "sortino_3y": 0.98, "calmar_3y": 1.18}, {"code": "140196", "name": "Edelweiss Liquid Fund - Direct Plan - Growth Option", "nav": 3657.207, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 7.03, "ret_5y": 6.34, "ret_10y": null, "ret_inception": 6.12, "sip_3y": 6.84, "sip_5y": 6.79, "sip_10y": null, "sd_3y": null, "sharpe_3y": 0.18, "sortino_3y": 0.48, "calmar_3y": 702.63}, {"code": "118551", "name": "Franklin U.S. Opportunities Equity Active Fund of Funds - Direct - Growth", "nav": 105.509, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 23.67, "ret_5y": 10.63, "ret_10y": 17.28, "ret_inception": 17.64, "sip_3y": 21.1, "sip_5y": 19.06, "sip_10y": 17.29, "sd_3y": null, "sharpe_3y": 0.81, "sortino_3y": 0.78, "calmar_3y": 0.98}, {"code": "120599", "name": "ICICI Prudential Multicap Fund - Direct Plan - Growth", "nav": 982.19, "as_of": "2026-08-21", "ret_1y": null, "ret_3y": 18.22, "ret_5y": 17.2, "ret_10y": 15.39, "ret_inception": 16.39, "sip_3y": 13.13, "sip_5y": 16.85, "sip_10y": 17.11, "sd_3y": null, "sharpe_3y": 0.81, "sortino_3y": 0.74, "calmar_3y": 1.06}, {"code": "120492", "name": "JM Flexicap Fund (Direct) - Growth Option", "nav": 116.165, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 16.83, "ret_5y": 17.65, "ret_10y": 16.75, "ret_inception": 16.87, "sip_3y": 8.55, "sip_5y": 15.65, "sip_10y": 17.49, "sd_3y": null, "sharpe_3y": 0.62, "sortino_3y": 0.55, "calmar_3y": 0.75}, {"code": "135781", "name": "Mirae Asset ELSS Tax Saver Fund - Direct Plan - Growth", "nav": 57.965, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 14.36, "ret_5y": 12.86, "ret_10y": 17.2, "ret_inception": 17.92, "sip_3y": 9.41, "sip_5y": 12.65, "sip_10y": 16.38, "sd_3y": null, "sharpe_3y": 0.52, "sortino_3y": 0.47, "calmar_3y": 0.84}, {"code": "127042", "name": "Motilal Oswal Midcap Fund-Direct Plan-Growth Option", "nav": 120.0094, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 22.05, "ret_5y": 23.72, "ret_10y": 17.94, "ret_inception": 22.01, "sip_3y": 12.18, "sip_5y": 19.68, "sip_10y": 21.08, "sd_3y": null, "sharpe_3y": 0.84, "sortino_3y": 0.82, "calmar_3y": 0.76}, {"code": "119788", "name": "SBI GOLD FUND- DIRECT PLAN - GROWTH", "nav": 46.68, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 36.39, "ret_5y": 25.37, "ret_10y": 16.11, "ret_inception": 11.37, "sip_3y": 40.04, "sip_5y": 31.74, "sip_10y": 21.65, "sd_3y": null, "sharpe_3y": 1.38, "sortino_3y": 1.31, "calmar_3y": 1.47}, {"code": "119721", "name": "SBI LARGE & MIDCAP FUND -DIRECT PLAN -Growth", "nav": 716.6716, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 15.07, "ret_5y": 15.34, "ret_10y": 15.09, "ret_inception": 16.52, "sip_3y": 10.24, "sip_5y": 13.91, "sip_10y": 16.29, "sd_3y": null, "sharpe_3y": 0.63, "sortino_3y": 0.57, "calmar_3y": 1.06}, {"code": "145724", "name": "Tata Arbitrage Fund-Direct Plan-Growth", "nav": 16.2596, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 7.54, "ret_5y": 6.77, "ret_10y": null, "ret_inception": 6.55, "sip_3y": 7.21, "sip_5y": 7.26, "sip_10y": null, "sd_3y": null, "sharpe_3y": 0.59, "sortino_3y": 0.71, "calmar_3y": 18.39}, {"code": "120847", "name": "quant ELSS Tax Saver Fund - Growth Option - Direct Plan", "nav": 465.9667, "as_of": "2026-08-18", "ret_1y": null, "ret_3y": 17.18, "ret_5y": 17.63, "ret_10y": 19.81, "ret_inception": 19.94, "sip_3y": 11.8, "sip_5y": 15.41, "sip_10y": 21.78, "sd_3y": null, "sharpe_3y": 0.61, "sortino_3y": 0.54, "calmar_3y": 0.67}]
+    </script>
+
+    <script>
+        const dataset = JSON.parse(document.getElementById('portfolio-data').textContent);
+        console.log("Loaded dataset size:", dataset.length);
+
+        // --- Helper formatting ---
+        const fmtPct = (val) => (val !== null && val !== undefined) ? `${val.toFixed(2)}%` : 'n/a';
+        const fmtNum = (val) => (val !== null && val !== undefined) ? val.toFixed(2) : 'n/a';
+
+        // --- Populate KPIs ---
+        let topCagr = -Infinity, topCagrName = '-';
+        let topSip = -Infinity, topSipName = '-';
+        let topSharpe = -Infinity, topSharpeName = '-';
+        let lowestSd = Infinity, lowestSdName = '-';
+
+        dataset.forEach(fund => {
+            if (fund.ret_3y && fund.ret_3y > topCagr) {
+                topCagr = fund.ret_3y; topCagrName = fund.name;
+            }
+            if (fund.sip_3y && fund.sip_3y > topSip) {
+                topSip = fund.sip_3y; topSipName = fund.name;
+            }
+            if (fund.sharpe_3y && fund.sharpe_3y > topSharpe) {
+                topSharpe = fund.sharpe_3y; topSharpeName = fund.name;
+            }
+            if (fund.sd_3y && fund.sd_3y < lowestSd) {
+                lowestSd = fund.sd_3y; lowestSdName = fund.name;
+            }
+        });
+
+        if (topCagr !== -Infinity) {
+            document.getElementById('kpi-top-cagr').textContent = fmtPct(topCagr);
+            document.getElementById('kpi-top-cagr-name').textContent = topCagrName;
+        }
+        if (topSip !== -Infinity) {
+            document.getElementById('kpi-top-sip').textContent = fmtPct(topSip);
+            document.getElementById('kpi-top-sip-name').textContent = topSipName;
+        }
+        if (topSharpe !== -Infinity) {
+            document.getElementById('kpi-top-sharpe').textContent = fmtNum(topSharpe);
+            document.getElementById('kpi-top-sharpe-name').textContent = topSharpeName;
+        }
+        if (lowestSd !== Infinity) {
+            document.getElementById('kpi-lowest-sd').textContent = fmtPct(lowestSd);
+            document.getElementById('kpi-lowest-sd-name').textContent = lowestSdName;
+        }
+
+        // --- Populate Table ---
+        const tbody = document.querySelector('tbody');
+        dataset.forEach(fund => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-slate-50/50 transition-colors';
+            tr.innerHTML = `
+                <td class="py-3 px-4 font-bold text-slate-800">
+                    <div class="truncate max-w-[320px]">${fund.name}</div>
+                    <span class="text-xs text-slate-400 font-semibold">AMFI: ${fund.code}</span>
+                </td>
+                <td class="py-3 px-4 text-center text-slate-600">${fmtPct(fund.ret_1y)}</td>
+                <td class="py-3 px-4 text-center font-bold text-slate-900">${fmtPct(fund.ret_3y)}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${fmtPct(fund.ret_5y)}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${fmtPct(fund.sip_3y)}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${fmtPct(fund.sip_5y)}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${fmtPct(fund.sd_3y)}</td>
+                <td class="py-3 px-4 text-center font-bold text-amber-700">${fmtNum(fund.sharpe_3y)}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${fmtNum(fund.sortino_3y)}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${fmtNum(fund.calmar_3y)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // --- CHART 1: Efficient Frontier (Scatter Plot) ---
+        const scatterData = dataset
+            .filter(f => f.sd_3y !== null && f.ret_3y !== null)
+            .map(f => ({
+                x: f.sd_3y,
+                y: f.ret_3y,
+                label: f.name
+            }));
+
+        new Chart(document.getElementById('chart-frontier'), {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Mutual Funds',
+                    data: scatterData,
+                    backgroundColor: '#10b981',
+                    hoverBackgroundColor: '#047857',
+                    pointRadius: 8,
+                    pointHoverRadius: 11
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Volatility: Standard Deviation (3Y) %', font: { weight: 'bold' } },
+                        grid: { color: '#f1f5f9' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Return: Trailing CAGR (3Y) %', font: { weight: 'bold' } },
+                        grid: { color: '#f1f5f9' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return `${ctx.raw.label}: Volatility: ${ctx.raw.x.toFixed(2)}%, Return: ${ctx.raw.y.toFixed(2)}%`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // --- CHART 2: Risk-Adjusted Quality Scores ---
+        const ratioLabels = dataset.map(f => f.name.substring(0, 15) + '...');
+        const sharpeSeries = dataset.map(f => f.sharpe_3y);
+        const sortinoSeries = dataset.map(f => f.sortino_3y);
+        const calmarSeries = dataset.map(f => f.calmar_3y);
+
+        new Chart(document.getElementById('chart-ratios'), {
+            type: 'bar',
+            data: {
+                labels: ratioLabels,
+                datasets: [
+                    { label: 'Sharpe', data: sharpeSeries, backgroundColor: '#f59e0b' },
+                    { label: 'Sortino', data: sortinoSeries, backgroundColor: '#3b82f6' },
+                    { label: 'Calmar', data: calmarSeries, backgroundColor: '#8b5cf6' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { title: { display: true, text: 'Score Value' }, grid: { color: '#f1f5f9' } }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { weight: 'semibold' } } }
+                }
+            }
+        });
+
+        // --- CHART 3: SIP Performance ---
+        const sipLabels = dataset.map(f => f.name.substring(0, 20) + '...');
+        const sip3ySeries = dataset.map(f => f.sip_3y);
+        const sip5ySeries = dataset.map(f => f.sip_5y);
+        const sip10ySeries = dataset.map(f => f.sip_10y);
+
+        new Chart(document.getElementById('chart-sip'), {
+            type: 'bar',
+            data: {
+                labels: sipLabels,
+                datasets: [
+                    { label: '3Y SIP XIRR', data: sip3ySeries, backgroundColor: '#4f46e5' },
+                    { label: '5Y SIP XIRR', data: sip5ySeries, backgroundColor: '#6366f1' },
+                    { label: '10Y SIP XIRR', data: sip10ySeries, backgroundColor: '#a5b4fc' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { grid: { display: false } },
+                    y: {
+                        title: { display: true, text: 'Annualized Return (XIRR) %', font: { weight: 'bold' } },
+                        grid: { color: '#f1f5f9' },
+                        ticks: { callback: function(value) { return value + '%'; } }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, font: { weight: 'semibold' } } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
