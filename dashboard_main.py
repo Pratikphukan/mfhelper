@@ -264,11 +264,16 @@ def main() -> int:
             const risk = fund.risk || {{}};
             const ra = fund.risk_adjusted || {{}};
 
-            if (tr.3y_cagr_pct && tr.3y_cagr_pct > topCagr) {{
-                topCagr = tr.3y_cagr_pct; topCagrName = fund.scheme_name;
+            const cagr_3y = tr["3y_cagr_pct"];
+            const sip_3y = sip["3y_xirr_pct"];
+            const sharpe_3y = ra["sharpe_3y"];
+            const sd_3y = risk["sd_3y_pct"];
+
+            if (cagr_3y && cagr_3y > topCagr) {{
+                topCagr = cagr_3y; topCagrName = fund.scheme_name;
             }}
-            if (sip.3y_xirr_pct && sip.3y_xirr_pct > topSip) {{
-                topSip = sip.3y_xirr_pct; topSipName = fund.scheme_name;
+            if (sip_3y && sip_3y > topSip) {{
+                topSip = sip_3y; topSipName = fund.scheme_name;
             }}
             if (ra.sharpe_3y && ra.sharpe_3y > topSharpe) {{
                 topSharpe = ra.sharpe_3y; topSharpeName = fund.scheme_name;
@@ -311,25 +316,25 @@ def main() -> int:
                     <div class="truncate max-w-[320px]">${{fund.scheme_name}}</div>
                     <span class="text-xs text-slate-400 font-bold uppercase">AMFI: ${{fund.scheme_code}}</span>
                 </td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr.1y_abs_pct)}}</td>
-                <td class="py-3 px-4 text-center font-bold text-slate-900">${{fmtPct(tr.3y_cagr_pct)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr.5y_cagr_pct)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip.3y_xirr_pct)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip.5y_xirr_pct)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(risk.sd_3y_pct)}}</td>
-                <td class="py-3 px-4 text-center font-bold text-amber-700">${{fmtNum(ra.sharpe_3y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra.sortino_3y)}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra.calmar_3y)}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr["1y_abs_pct"])}}</td>
+                <td class="py-3 px-4 text-center font-bold text-slate-900">${{fmtPct(tr["3y_cagr_pct"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr["5y_cagr_pct"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip["3y_xirr_pct"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip["5y_xirr_pct"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(risk["sd_3y_pct"])}}</td>
+                <td class="py-3 px-4 text-center font-bold text-amber-700">${{fmtNum(ra["sharpe_3y"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra["sortino_3y"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra["calmar_3y"])}}</td>
             `;
             tbody.appendChild(rowElement);
         }});
 
         // --- CHART 1: Efficient Frontier (Scatter Plot) ---
         const scatterData = dataset
-            .filter(f => f.risk?.sd_3y_pct !== undefined && f.trailing_returns?.3y_cagr_pct !== undefined)
+            .filter(f => f.risk?.["sd_3y_pct"] !== undefined && f.trailing_returns?.["3y_cagr_pct"] !== undefined)
             .map(f => ({{
-                x: f.risk.sd_3y_pct,
-                y: f.trailing_returns.3y_cagr_pct,
+                x: f.risk["sd_3y_pct"],
+                y: f.trailing_returns["3y_cagr_pct"],
                 label: f.scheme_name
             }}));
 
@@ -373,9 +378,9 @@ def main() -> int:
 
         // --- CHART 2: Risk-Adjusted Quality Scores ---
         const ratioLabels = dataset.map(f => f.scheme_name.substring(0, 15) + '...');
-        const sharpeSeries = dataset.map(f => f.risk_adjusted?.sharpe_3y);
-        const sortinoSeries = dataset.map(f => f.risk_adjusted?.sortino_3y);
-        const calmarSeries = dataset.map(f => f.risk_adjusted?.calmar_3y);
+        const sharpeSeries = dataset.map(f => f.risk_adjusted?.["sharpe_3y"]);
+        const sortinoSeries = dataset.map(f => f.risk_adjusted?.["sortino_3y"]);
+        const calmarSeries = dataset.map(f => f.risk_adjusted?.["calmar_3y"]);
 
         new Chart(document.getElementById('chart-ratios'), {{
             type: 'bar',
@@ -402,9 +407,9 @@ def main() -> int:
 
         // --- CHART 3: SIP Performance ---
         const sipLabels = dataset.map(f => f.scheme_name.substring(0, 20) + '...');
-        const sip3ySeries = dataset.map(f => f.hypothetical_sip_xirr?.3y_xirr_pct);
-        const sip5ySeries = dataset.map(f => f.hypothetical_sip_xirr?.5y_xirr_pct);
-        const sip10ySeries = dataset.map(f => f.hypothetical_sip_xirr?.10y_xirr_pct);
+        const sip3ySeries = dataset.map(f => f.hypothetical_sip_xirr?.["3y_xirr_pct"]);
+        const sip5ySeries = dataset.map(f => f.hypothetical_sip_xirr?.["5y_xirr_pct"]);
+        const sip10ySeries = dataset.map(f => f.hypothetical_sip_xirr?.["10y_xirr_pct"]);
 
         new Chart(document.getElementById('chart-sip'), {{
             type: 'bar',
@@ -493,14 +498,14 @@ def main() -> int:
                         <div>
                             <h4 class="text-sm font-bold uppercase text-slate-400 tracking-wider mb-3">Trailing Returns Summary</h4>
                             <div class="grid grid-cols-2 gap-4">
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Week return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.1w_pct)}}</div></div>
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Month return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.1m_pct)}}</div></div>
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">3-Month return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.3m_pct)}}</div></div>
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Year return (Abs)</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.1y_abs_pct)}}</div></div>
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">3-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr.3y_cagr_pct)}}</div></div>
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">5-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr.5y_cagr_pct)}}</div></div>
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">10-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr.10y_cagr_pct)}}</div></div>
-                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">Since Inception CAGR</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr.since_inception_cagr_pct)}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Week return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr["1w_pct"])}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Month return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr["1m_pct"])}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">3-Month return</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr["3m_pct"])}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">1-Year return (Abs)</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr["1y_abs_pct"])}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">3-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr["3y_cagr_pct"])}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">5-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr["5y_cagr_pct"])}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">10-Year CAGR</div><div class="text-lg font-bold mt-1 text-emerald-600">${{fmtPct(tr["10y_cagr_pct"])}}</div></div>
+                                <div class="bg-slate-50 p-4 rounded-xl border border-slate-100"><div class="text-xs text-slate-400 font-semibold">Since Inception CAGR</div><div class="text-lg font-bold mt-1 text-slate-800">${{fmtPct(tr["since_inception_cagr_pct"])}}</div></div>
                             </div>
                         </div>
                         <div>
