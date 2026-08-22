@@ -244,11 +244,18 @@ def run(args: argparse.Namespace) -> int:
     log.info("Loaded %d fund(s) from %s", len(funds), args.funds)
     if args.code:
         wanted = {c.strip() for c in args.code}
-        funds = [f for f in funds if f.code in wanted]
-        if not funds:
-            log.error("No funds matched --code filter %s", sorted(wanted))
-            return 2
-        log.info("Filtered to %d fund(s) by --code", len(funds))
+        filtered_funds = [f for f in funds if f.code in wanted]
+        
+        # If some codes are missing from the YAML, dynamically generate placeholder FundConfig objects!
+        found_codes = {f.code for f in filtered_funds}
+        missing_codes = [c for c in wanted if c not in found_codes]
+        if missing_codes:
+            from mfhelper.config import FundConfig
+            for mc in missing_codes:
+                filtered_funds.append(FundConfig(code=mc, name=None))
+                
+        funds = filtered_funds
+        log.info("Resolved %d fund(s) for --code query (%d from config list, %d dynamic placeholders)", len(funds), len(found_codes), len(missing_codes))
 
     writer = FundReturnsWriter(args.output_dir)
     benchmark_map = {} if args.no_benchmark else _load_benchmark_map(BENCHMARKS_PATH)
