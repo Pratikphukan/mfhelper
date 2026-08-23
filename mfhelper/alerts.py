@@ -269,6 +269,7 @@ def dispatch_alerts_email(
     alerts: list[TriggeredAlert],
     email_config: AlertEmailConfig,
     confluence_signals: list[DipBuyingSignal] | None = None,
+    is_dev: bool = False,
 ) -> bool:
     """Send a beautifully formatted HTML alert digest via SMTP."""
     if not email_config.enable:
@@ -296,7 +297,8 @@ def dispatch_alerts_email(
 
     # Create the HTML structure
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"🚨 MFHelper Technical Buy/Sell Alerts: {len(alerts)} Trigger(s)"
+    subject_prefix = "🚨 [DEV]" if is_dev else "🚨"
+    msg["Subject"] = f"{subject_prefix} MFHelper Technical Buy/Sell Alerts: {len(alerts)} Trigger(s)"
     msg["From"] = sender
     msg["To"] = receiver
 

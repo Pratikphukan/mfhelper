@@ -29,6 +29,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 import logging
 import sys
+import argparse
 
 from mfhelper.amfi import fetch_and_parse
 from mfhelper.columns import SheetColumnStore, reconcile
@@ -73,17 +74,23 @@ def _configure_logging() -> None:
     root.addHandler(stream_handler)
 
 
-def run() -> int:
+def run(args: argparse.Namespace) -> int:
     log = logging.getLogger("mfhelper.main")
 
     funds = load_funds(FUNDS_PATH)
     settings = load_settings(SETTINGS_PATH)
     alert_settings = load_alert_settings(ALERTS_PATH)
+
+    worksheet_name = settings.google_sheet.worksheet
+    if args.dev:
+        worksheet_name = f"{worksheet_name} (Dev)"
+        log.info("[DEVELOPMENT MODE] Appending to separate worksheet tab: %s", worksheet_name)
+
     log.info(
         "Loaded %d funds, target sheet %s/%s. Alerts enabled: %s",
         len(funds),
         settings.google_sheet.spreadsheet_id,
-        settings.google_sheet.worksheet,
+        worksheet_name,
         alert_settings.email.enable,
     )
 
@@ -246,7 +253,7 @@ def run() -> int:
 
     appender = SheetAppender(
         spreadsheet_id=settings.google_sheet.spreadsheet_id,
-        worksheet_name=settings.google_sheet.worksheet,
+        worksheet_name=worksheet_name,
         credentials_path=CREDENTIALS_PATH,
         token_path=TOKEN_PATH,
     )
@@ -289,7 +296,7 @@ def run() -> int:
     )
 
     # Dispatch indicator alerts email digest if any are triggered
-    dispatch_alerts_email(all_triggered_alerts, alert_settings.email, all_confluence_signals)
+    dispatch_alerts_email(all_triggered_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev)
 
     if fallback_codes:
         log.info(
@@ -325,12 +332,27 @@ def run() -> int:
     return 0
 
 
-def main() -> int:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    import argparse
+    p = argparse.ArgumentParser(
+        prog="mfhelper-nav",
+        description="Run daily NAV tracker and append to Google Sheet.",
+    )
+    p.add_argument(
+        "--dev",
+        action="store_true",
+        help="Run in development mode: appends to a separate dev worksheet tab.",
+    )
+    return p.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
     _configure_logging()
     log = logging.getLogger("mfhelper.main")
     log.info("=== MFHelper run start ===")
     try:
-        return run()
+        args = _parse_args(argv)
+        return run(args)
     except Exception:
         log.exception("Unhandled error during MFHelper run")
         return 3
