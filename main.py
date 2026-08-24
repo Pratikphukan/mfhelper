@@ -42,7 +42,7 @@ from mfhelper.metrics import (
 from mfhelper.mfapi import MfapiResult, fetch_history as mfapi_fetch_history
 from mfhelper.sheets import NavValue, SheetAppender
 from mfhelper.state import LastNavStore, PrevNav
-from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal
+from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal, resolve_conflicting_alerts
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -209,8 +209,8 @@ def run(args: argparse.Namespace) -> int:
         new_state[fund.code] = PrevNav(nav=current_nav, nav_date=current_date)
 
         # Check technical indicator buy/sell triggers
-        # Skip technical indicators for stable debt/liquid funds or gold/commodities to avoid false alert noise
-        if fund.category not in ("debt", "liquid", "arbitrage", "overnight", "gold", "commodity", "skip"):
+        # Skip technical indicators for stable debt/liquid funds to avoid false alert noise
+        if fund.category not in ("debt", "liquid", "arbitrage", "overnight", "skip"):
             triggered = check_fund_alerts(
                 scheme_code=fund.code,
                 fund_name=display_names[fund.code],
@@ -239,7 +239,7 @@ def run(args: argparse.Namespace) -> int:
                 all_confluence_signals.append(confluence)
                 log.info("  [CONFLUENCE] Triggered Tier-%d buy signal for %s", confluence.tier, fund.code)
         else:
-            log.info("  [ALERT] Suppressed technical indicators for non-equity/stable fund %s", fund.code)
+            log.info("  [ALERT] Suppressed technical indicators for stable debt/liquid fund %s", fund.code)
 
     for code in ordered_codes:
         if code not in display_names:
@@ -299,8 +299,11 @@ def run(args: argparse.Namespace) -> int:
         len(new_state),
     )
 
+    # Resolve any contradictory/conflicting alerts (e.g. RSI overbought vs Peak discount) before dispatching!
+    resolved_alerts = resolve_conflicting_alerts(all_triggered_alerts)
+
     # Dispatch indicator alerts email digest if any are triggered
-    dispatch_alerts_email(all_triggered_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev)
+    dispatch_alerts_email(resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev)
 
     if fallback_codes:
         log.info(

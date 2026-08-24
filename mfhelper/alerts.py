@@ -433,3 +433,48 @@ def dispatch_alerts_email(
     except Exception as e:
         log.exception("Failed to send Technical Alert email via SMTP:")
         return False
+
+
+def resolve_conflicting_alerts(alerts: list[TriggeredAlert]) -> list[TriggeredAlert]:
+    """Identify and resolve contradictory BUY and TRIM/WARNING alerts for any fund."""
+    from collections import defaultdict
+    by_fund = defaultdict(list)
+    for alt in alerts:
+        by_fund[alt.scheme_code].append(alt)
+        
+    resolved_alerts = []
+    
+    for code, fund_alerts in by_fund.items():
+        has_buy = any("BUY" in alt.alert_type for alt in fund_alerts)
+        has_sell = any("TRIM" in alt.alert_type or "WARNING" in alt.alert_type or "CROSS-BELOW" in alt.alert_type for alt in fund_alerts)
+        
+        if has_buy and has_sell:
+            # We have a contradiction!
+            # Find the RSI value and Discount value
+            rsi_alt = next((alt for alt in fund_alerts if "RSI" in alt.indicator_name), None)
+            disc_alt = next((alt for alt in fund_alerts if "Distance" in alt.indicator_name), None)
+            
+            fund_name = fund_alerts[0].fund_name
+            rsi_val_str = f"{rsi_alt.current_value:.2f}" if rsi_alt else "n/a"
+            disc_val_str = f"{disc_alt.current_value:.2f}%" if disc_alt else "n/a"
+            
+            # Create a single, consolidated warning alert
+            resolved_alerts.append(TriggeredAlert(
+                scheme_code=code,
+                fund_name=fund_name,
+                indicator_name="RSI vs. Peak Discount",
+                current_value=rsi_alt.current_value if rsi_alt else (disc_alt.current_value if disc_alt else 0.0),
+                trigger_level=rsi_alt.trigger_level if rsi_alt else 0.0,
+                alert_type="CONTRADICTORY INDICATORS / HOLD",
+                action_suggestion=f"Consolidating: Short-term momentum is extremely high (RSI is {rsi_val_str}), but the fund remains at a long-term discount ({disc_val_str}). Suggesting holding off on lumpsums and pausing fresh buys until RSI cools down."
+            ))
+            
+            # Keep any trend crossing alerts or other non-conflicting alerts if present
+            for alt in fund_alerts:
+                if "RSI" not in alt.indicator_name and "Distance" not in alt.indicator_name:
+                    resolved_alerts.append(alt)
+        else:
+            # No contradiction, keep all alerts for this fund
+            resolved_alerts.extend(fund_alerts)
+            
+    return resolved_alerts
