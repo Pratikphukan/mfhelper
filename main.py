@@ -209,33 +209,37 @@ def run(args: argparse.Namespace) -> int:
         new_state[fund.code] = PrevNav(nav=current_nav, nav_date=current_date)
 
         # Check technical indicator buy/sell triggers
-        triggered = check_fund_alerts(
-            scheme_code=fund.code,
-            fund_name=display_names[fund.code],
-            history=mfapi_result.history if mfapi_result else [],
-            current_nav=current_nav,
-            current_date=current_date,
-            current_rsi=rsi_value,
-            current_dist_52w=dist_52w_pct,
-            current_dist_200d_sma=dist_200d_sma_pct,
-            rules=alert_settings.rules,
-        )
-        if triggered:
-            all_triggered_alerts.extend(triggered)
-            log.info("  [ALERT] Triggered %d indicator alert(s) for %s", len(triggered), fund.code)
+        # Skip technical indicators for stable debt/liquid funds or gold/commodities to avoid false alert noise
+        if fund.category not in ("debt", "liquid", "arbitrage", "overnight", "gold", "commodity", "skip"):
+            triggered = check_fund_alerts(
+                scheme_code=fund.code,
+                fund_name=display_names[fund.code],
+                history=mfapi_result.history if mfapi_result else [],
+                current_nav=current_nav,
+                current_date=current_date,
+                current_rsi=rsi_value,
+                current_dist_52w=dist_52w_pct,
+                current_dist_200d_sma=dist_200d_sma_pct,
+                rules=alert_settings.rules,
+            )
+            if triggered:
+                all_triggered_alerts.extend(triggered)
+                log.info("  [ALERT] Triggered %d indicator alert(s) for %s", len(triggered), fund.code)
 
-        # Check for confluence dip-buying opportunities
-        confluence = check_confluence_signal(
-            scheme_code=fund.code,
-            fund_name=display_names[fund.code],
-            current_rsi=rsi_value,
-            current_dist_52w=dist_52w_pct,
-            current_dist_200d_sma=dist_200d_sma_pct,
-            rules=alert_settings.rules,
-        )
-        if confluence:
-            all_confluence_signals.append(confluence)
-            log.info("  [CONFLUENCE] Triggered Tier-%d buy signal for %s", confluence.tier, fund.code)
+            # Check for confluence dip-buying opportunities
+            confluence = check_confluence_signal(
+                scheme_code=fund.code,
+                fund_name=display_names[fund.code],
+                current_rsi=rsi_value,
+                current_dist_52w=dist_52w_pct,
+                current_dist_200d_sma=dist_200d_sma_pct,
+                rules=alert_settings.rules,
+            )
+            if confluence:
+                all_confluence_signals.append(confluence)
+                log.info("  [CONFLUENCE] Triggered Tier-%d buy signal for %s", confluence.tier, fund.code)
+        else:
+            log.info("  [ALERT] Suppressed technical indicators for non-equity/stable fund %s", fund.code)
 
     for code in ordered_codes:
         if code not in display_names:

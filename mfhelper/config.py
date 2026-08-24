@@ -21,6 +21,9 @@ class FundConfig:
     # AMC has renamed them since launch -- Groww keeps the legacy slug).
     # Example: "jm-multi-strategy-fund-direct-growth".
     groww_slug: str | None = None
+    # Optional asset category (e.g. "debt", "commodity", "equity").
+    # Used to filter out false alerts on stable/non-equity asset classes.
+    category: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,11 +80,17 @@ def load_funds(path: Path) -> list[FundConfig]:
         if slug_raw is not None:
             groww_slug = str(slug_raw).strip() or None
 
+        category_raw = entry.get("category")
+        category: str | None = None
+        if category_raw is not None:
+            category = str(category_raw).strip().lower() or None
+
         funds.append(FundConfig(
             code=code,
             name=name,
             expense_ratio_pct=expense_ratio_pct,
             groww_slug=groww_slug,
+            category=category,
         ))
     return funds
 
