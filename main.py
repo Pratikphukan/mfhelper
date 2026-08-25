@@ -42,7 +42,7 @@ from mfhelper.metrics import (
 from mfhelper.mfapi import MfapiResult, fetch_history as mfapi_fetch_history
 from mfhelper.sheets import NavValue, SheetAppender
 from mfhelper.state import LastNavStore, PrevNav
-from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal, resolve_conflicting_alerts
+from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal, resolve_conflicting_alerts, check_trimming_signal
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -135,6 +135,7 @@ def run(args: argparse.Namespace) -> int:
 
     all_triggered_alerts = []
     all_confluence_signals = []
+    all_trimming_signals = []
     values_by_code: dict[str, NavValue] = {}
     new_state: dict[str, PrevNav] = dict(prev_state)
     missing_codes: list[str] = []
@@ -238,6 +239,18 @@ def run(args: argparse.Namespace) -> int:
             if confluence:
                 all_confluence_signals.append(confluence)
                 log.info("  [CONFLUENCE] Triggered Tier-%d buy signal for %s", confluence.tier, fund.code)
+
+            # Check for overbought trimming opportunities
+            trim_signal = check_trimming_signal(
+                scheme_code=fund.code,
+                fund_name=display_names[fund.code],
+                current_rsi=rsi_value,
+                current_dist_52w=dist_52w_pct,
+                rules=alert_settings.rules,
+            )
+            if trim_signal:
+                all_trimming_signals.append(trim_signal)
+                log.info("  [TRIM] Triggered Tier-%d profit-taking/trim signal for %s", trim_signal.tier, fund.code)
         else:
             log.info("  [ALERT] Suppressed technical indicators for stable debt/liquid fund %s", fund.code)
 
@@ -303,7 +316,7 @@ def run(args: argparse.Namespace) -> int:
     resolved_alerts = resolve_conflicting_alerts(all_triggered_alerts)
 
     # Dispatch indicator alerts email digest if any are triggered
-    dispatch_alerts_email(resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev)
+    dispatch_alerts_email(resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev, trimming_signals=all_trimming_signals)
 
     if fallback_codes:
         log.info(

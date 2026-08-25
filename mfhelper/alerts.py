@@ -110,6 +110,82 @@ def check_confluence_signal(
     return None
 
 
+@dataclass(frozen=True)
+class TrimmingSignal:
+    scheme_code: str
+    fund_name: str
+    tier: int               # 1, 2, or 3
+    reasons: list[str]      # e.g., ["RSI is 76.5 (Overbought)", "52W Drop is -0.5% (Peak)"]
+    suggestion: str
+    groww_link: str         # Direct search page link
+
+
+def check_trimming_signal(
+    scheme_code: str,
+    fund_name: str,
+    current_rsi: float | None,
+    current_dist_52w: float | None,
+    rules: AlertRulesConfig,
+) -> TrimmingSignal | None:
+    """Check today's indicators for a single fund to see if they form an overbought trimming signal."""
+    import urllib.parse
+    groww_query = urllib.parse.quote_plus(fund_name)
+    groww_link = f"https://groww.in/mutual-funds/search?q={groww_query}"
+
+    # Trim Tier 3 (Extreme Climax Peak - Urgent Action)
+    t3_reasons = []
+    if current_rsi is not None and current_rsi >= 75.0:
+        t3_reasons.append(f"RSI is {current_rsi:.2f} (Extreme Overbought)")
+    if current_dist_52w is not None and current_dist_52w >= -1.0:
+        t3_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Urgent Peak)")
+
+    if len(t3_reasons) >= 2:
+        return TrimmingSignal(
+            scheme_code=scheme_code,
+            fund_name=fund_name,
+            tier=3,
+            reasons=t3_reasons,
+            suggestion="Urgent Climax Warning. Fund is trading at extreme peak overbought conditions. Strongly suggesting trimming 5% to 10% of total profits to cash and pausing all SIPs immediately.",
+            groww_link=groww_link,
+        )
+
+    # Trim Tier 2 (Moderate Overstretch - Trim Zone)
+    t2_reasons = []
+    if current_rsi is not None and current_rsi >= 70.0:
+        t2_reasons.append(f"RSI is {current_rsi:.2f} (Standard Overbought)")
+    if current_dist_52w is not None and current_dist_52w >= -3.0:
+        t2_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Near Peak)")
+
+    if len(t2_reasons) >= 2:
+        return TrimmingSignal(
+            scheme_code=scheme_code,
+            fund_name=fund_name,
+            tier=2,
+            reasons=t2_reasons,
+            suggestion="Moderate Overstretch. Strong uptrend momentum, but entering the trim zone. Suggesting pausing manual top-ups and considering locking in partial profits.",
+            groww_link=groww_link,
+        )
+
+    # Trim Tier 1 (Mild Momentum Run)
+    t1_reasons = []
+    if current_rsi is not None and current_rsi >= 65.0:
+        t1_reasons.append(f"RSI is {current_rsi:.2f} (Mild Momentum)")
+    if current_dist_52w is not None and current_dist_52w >= -5.0:
+        t1_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Close to Peak)")
+
+    if len(t1_reasons) >= 2:
+        return TrimmingSignal(
+            scheme_code=scheme_code,
+            fund_name=fund_name,
+            tier=1,
+            reasons=t1_reasons,
+            suggestion="Mild Momentum Run. Strong trend. Suggesting holding your positions but avoiding any large fresh manual lumpsums.",
+            groww_link=groww_link,
+        )
+
+    return None
+
+
 def check_fund_alerts(
     scheme_code: str,
     fund_name: str,
@@ -270,6 +346,7 @@ def dispatch_alerts_email(
     email_config: AlertEmailConfig,
     confluence_signals: list[DipBuyingSignal] | None = None,
     is_dev: bool = False,
+    trimming_signals: list[TrimmingSignal] | None = None,
 ) -> bool:
     """Send a beautifully formatted HTML alert digest via SMTP."""
     if not email_config.enable:
@@ -304,7 +381,7 @@ def dispatch_alerts_email(
 
     briefing_html = ""
     if confluence_signals:
-        briefing_html = """
+        briefing_html += """
         <div style="background-color: #fdfefe; border: 1px solid #c3e6cb; border-radius: 6px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
             <h3 style="color: #155724; margin-top: 0; display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                🚨 PORTFOLIO DIP-BUYING INTELLIGENCE BRIEFING
@@ -341,6 +418,53 @@ def dispatch_alerts_email(
                     <div style="margin-top: 12px;">
                         <a href="{sig.groww_link}" target="_blank" style="background-color: #155724; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-block;">
                             🛒 BUY ON GROWW
+                        </a>
+                    </div>
+                </div>
+            """
+        briefing_html += """
+            </div>
+        </div>
+        """
+
+    if trimming_signals:
+        briefing_html += """
+        <div style="background-color: #fffaf0; border: 1px solid #f5c6cb; border-radius: 6px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <h3 style="color: #721c24; margin-top: 0; display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+               🚨 PORTFOLIO PROFIT-TAKING & TRIMMING BRIEFING
+            </h3>
+            <div style="display: flex; flex-direction: column; gap: 15px; width: 100%;">
+        """
+        for sig in trimming_signals:
+            if sig.tier == 3:
+                badge = '<span style="background-color: #f8d7da; color: #721c24; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">TRIM TIER 3 (URGENT)</span>'
+                border_color = "#f5c6cb"
+                card_bg = "#fdf3f2"
+            elif sig.tier == 2:
+                badge = '<span style="background-color: #ffe8cc; color: #7a3700; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">TRIM TIER 2 (MODERATE)</span>'
+                border_color = "#ffd8a8"
+                card_bg = "#fff9db"
+            else:
+                badge = '<span style="background-color: #fff3cd; color: #856404; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">TRIM TIER 1 (MILD)</span>'
+                border_color = "#ffeeba"
+                card_bg = "#fffdf0"
+                
+            reasons_str = ", ".join(sig.reasons)
+            briefing_html += f"""
+                <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
+                    <div style="margin-bottom: 8px;">
+                        <span style="font-weight: bold; font-size: 15px; color: #212529; vertical-align: middle; margin-right: 8px;">{sig.fund_name}</span>
+                        {badge}
+                    </div>
+                    <div style="font-size: 12px; color: #6c757d; line-height: 1.4; margin-bottom: 6px;">
+                        <strong>Triggered by confluences:</strong> {reasons_str}
+                    </div>
+                    <div style="font-size: 13px; color: #212529; line-height: 1.5; margin-top: 6px; font-style: italic;">
+                        <strong>Action Suggestion:</strong> {sig.suggestion}
+                    </div>
+                    <div style="margin-top: 12px;">
+                        <a href="{sig.groww_link}" target="_blank" style="background-color: #721c24; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-block;">
+                            🛒 TRIM ON GROWW
                         </a>
                     </div>
                 </div>
