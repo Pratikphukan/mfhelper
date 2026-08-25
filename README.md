@@ -1,17 +1,41 @@
-# MFHelper
+# MFHelper: Mutual Fund Tracking & Portfolio Automation Station
 
-A small Python job that:
+**MFHelper** is a state-of-the-art, fully automated mutual fund intelligence station. It handles everything from daily real-time NAV tracking and Google Sheets database syncs, to advanced portfolio overlap calculations, interactive risk/performance dashboards, and tactical "buy the dip" or "trim profit" email alert briefs.
 
-1. Downloads AMFI's daily NAV dump (https://www.amfiindia.com/spages/NAVAll.txt)
-2. Picks out the funds you care about
-3. Computes day-change % against the previous run's NAV
-4. Computes distance from the trailing 52-week high (using mfapi.in for history)
-5. Computes distance from the 200-day Simple Moving Average (same mfapi.in history)
-6. Computes RSI (14-day, Wilder smoothing) from the same history
-7. Appends one row per run to a Google Sheet (wide format: five sub-columns per fund)
-8. Trims the sheet so it always holds a rolling window of the **30 most recent run-dates**
+It is designed to run **completely free in the cloud** via GitHub Actions (immune to local computer sleep or network cuts) while providing safe offline sandboxing on your local machine.
 
-Runs automatically every day at **10:30 AM IST** via macOS `launchd`.
+---
+
+## 🚀 Key Capabilities & Features
+
+### 1. 📬 Tactical Buying & Trimming Confluence Assistant
+Your morning alerts are driven by a **Decision-Making Confluence Engine**. Instead of flooding your inbox with standard individual notifications, the app synthesizes multiple indicators at once:
+* **Tactical Buying Briefings:** Highlights funds where multiple metrics align (e.g. *both* oversold RSI and 52W drop) with an explicit action suggestion (Tier-1, 2, or 3) and a deep-link buy button.
+* **Tactical Trimming Briefings:** Warns you when funds enter an extreme overbought climax run, advising you to take partial profits and pause SIPs.
+* **Asset-Class Filtering & Conflict Resolution:** Suppresses meaningless "false alarm" technical alerts for stable debt/liquid/arbitrage funds. If indicators contradict (e.g., short-term overbought but long-term discount), it merges them into a smart, consolidated `HOLD` warning.
+
+### 2. 🗺️ Portfolio Overlap Analyzer (`overlap_main.py`)
+Are you secretly holding multiple mutual funds that invest in the exact same stocks?
+* Computes the **minimum-weight portfolio intersection** between all your funds.
+* Prints a beautifully aligned **Pairwise Overlap Matrix Table** in the terminal.
+* Applies a **90% Relevance Concentration Rule**: lists the detailed stock allocations for those stocks contributing to 90% of the overlap, while cleanly grouping the minor ones at the bottom to eliminate clutter.
+* Automatically writes this detailed matrix and stock-level reports to a custom **`Portfolio Overlap`** tab in your Google Sheet!
+
+### 3. 🎨 Interactive Performance & Risk Web Dashboard (`dashboard_main.py`)
+Brings your offline returns database to life in a stunning web interface (`dashboard.html`):
+* **The Efficient Frontier Plot:** Interactive scatter plot comparing **Volatility (SD %)** against **3Y Returns** to visually inspect fund efficiency (optimal funds cluster in the top-left).
+* **SIP & Ratio Comparisons:** Bar charts comparing 3Y/5Y/10Y SIP XIRR% and Sharpe/Sortino/Calmar ratios side-by-side.
+* **Slide-Over Fund Detail Explorer:** Click on any fund row in the stats grid, and an elegant sidebar glides open to display its full **Trailing CAGR**, **Yearly (CY/FY) returns**, and detailed **Rolling CAGR distributions**!
+
+### 4. ⚙️ Secure Cloud Scheduling (GitHub Actions) & State Caching
+* Runs entirely on **GitHub Actions** daily at **10:30 AM IST (5:00 AM UTC)** Tuesday through Saturday (matching AMFI’s business-day publishing cycle).
+* Uses **encrypted Repository Secrets** so none of your passwords or Google OAuth JSON files are ever committed to public git.
+* Uses **native GitHub Actions Caching (`actions/cache`)** to securely persist yesterday's NAV state file (`last_nav.json`) across runs, completely protecting your git history from daily automated commit clutter!
+
+### 5. 🛡️ Isolated Dev Sandbox (`--dev` flag)
+To prevent local development testing from polluting your production databases or confusing you with false emails:
+* Running locally with `.venv/bin/python main.py --dev` automatically redirects all writes to a separate **`Daily NAV (Dev)`** worksheet tab and prefixes email subjects with **`[DEV]`**. 
+* Running in production on GitHub Actions automatically writes to your primary **`Daily NAV`** sheet and sends standard production briefs.
 
 ---
 
@@ -464,17 +488,55 @@ Plots and benchmark caches are git-ignored by default (`data/fund_plots/`, `data
 
 ---
 
-## Uninstall / disable the scheduler
+## 🏆 Running the Advanced Analyzers
 
+### 1. The Portfolio Overlap Analyzer
+To inspect the stock-level overlap and find hidden concentration risks across your mutual funds:
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.mfhelper.daily.plist
-rm ~/Library/LaunchAgents/com.mfhelper.daily.plist
+.venv/bin/python overlap_main.py
 ```
+*(This will output the overlap matrix table, perform the 90% relevance analysis, and automatically update your Google Sheet!)*
 
-The project files stay; only the scheduled trigger is removed.
+### 2. The Interactive HTML Dashboard
+To compile and explore your funds' returns, yearly cycles, risk parameters, and rolling statistics interactively:
+1. **Refresh your returns database:**
+   ```bash
+   .venv/bin/python returns_main.py --no-benchmark
+   ```
+2. **Generate the dashboard page:**
+   ```bash
+   .venv/bin/python dashboard_main.py
+   ```
+3. **Explore:** Double-click the generated **`dashboard.html`** file in your project folder to open the interactive visualization board in Safari/Chrome!
 
 ---
 
-## Changing the schedule time
+## ☁️ Setting up the GitHub Actions Cloud Scheduler
 
-Edit the `StartCalendarInterval` block in `scripts/com.mfhelper.daily.plist` (change `Hour` and `Minute`), then re-run `./scripts/install_launchd.sh`.
+To make this daily job run automatically and reliably in the cloud every morning at **10:30 AM IST (TUE-SAT)**:
+
+1. **Encode your Credentials and Token into Base64 (on your Mac terminal):**
+   ```bash
+   base64 -i config/credentials.json | pbcopy
+   ```
+   *(Paste this copied string into a new GitHub Secret named **`GCP_CREDENTIALS_JSON`**)*
+   
+   ```bash
+   base64 -i data/token.json | pbcopy
+   ```
+   *(Paste this copied string into a new GitHub Secret named **`GCP_TOKEN_JSON`**)*
+
+   ```bash
+   base64 -i config/alerts.yaml | pbcopy
+   ```
+   *(Paste this copied string into a new GitHub Secret named **`ALERTS_YAML`**)*
+
+2. **Configure your Secrets on GitHub:**
+   * Go to your repository on **GitHub.com** -> **Settings** -> **Secrets and variables** -> **Actions**.
+   * Click **New repository secret** and add:
+     * `GCP_CREDENTIALS_JSON` (Base64 credential string)
+     * `GCP_TOKEN_JSON` (Base64 token string)
+     * `ALERTS_YAML` (Base64 alerts config string)
+     * `EMAIL_PASSWORD` (Your 16-character SMTP email App password)
+
+The cloud scheduler is now fully configured! It uses secure, native **GitHub Actions Caching** to persist state between runs without cluttering your git history!
