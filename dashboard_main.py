@@ -55,6 +55,17 @@ def main() -> int:
         print("\n❌ Error: No fund returns JSON files found! Please run 'returns_main.py' first to generate your performance data.")
         return 2
 
+    # Load Combined Portfolio Allocation cache if it exists
+    combined_allocation = None
+    combined_cache_path = DATA_DIR / "combined_portfolio_allocation.json"
+    if combined_cache_path.exists():
+        try:
+            with combined_cache_path.open("r", encoding="utf-8") as f:
+                combined_allocation = json.load(f)
+            log.info("Successfully loaded cached combined portfolio allocation.")
+        except Exception as e:
+            log.warning("Failed to load combined portfolio allocation cache: %s", e)
+
     # 1. Parse and Aggregate the fund datasets (Injecting full raw JSON structures!)
     aggregated_data = []
     
@@ -109,6 +120,46 @@ def main() -> int:
                 <div class="text-sm font-bold text-slate-700 mt-0.5">{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
             </div>
         </header>
+
+        <!-- Combined Portfolio Map Section -->
+        <section id="combined-allocation-section" class="hidden mb-8">
+            <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+                <div class="border-b border-slate-100 pb-4 mb-6 flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h2 class="text-xl font-extrabold text-slate-900 tracking-tight">🧱 True Consolidated Asset Allocation Map</h2>
+                        <p class="text-xs text-slate-400 font-semibold mt-0.5">Aggregates your fund portfolios using custom investment weights to show your true consolidated concentrations.</p>
+                    </div>
+                    <span id="allocation-cache-date" class="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-lg">Updated: -</span>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Sector Donut Chart -->
+                    <div class="lg:col-span-4 flex flex-col justify-center border-r border-slate-100 pr-6">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 text-center lg:text-left">Combined Asset Class Distribution</h3>
+                        <div class="relative h-[240px] w-full flex items-center justify-center">
+                            <canvas id="chart-combined-sectors"></canvas>
+                        </div>
+                    </div>
+                    <!-- Top Stocks Progress Bars -->
+                    <div class="lg:col-span-8 flex flex-col justify-between">
+                        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Top 6 Consolidated Stock Holdings</h3>
+                        <div class="space-y-4" id="combined-stocks-list">
+                            <!-- Dynamically populated progress bars -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Inactive Combined Map Banner -->
+        <section id="combined-allocation-banner" class="mb-8">
+            <div class="bg-slate-50 border-2 border-dashed border-slate-200 p-6 rounded-2xl text-center">
+                <h3 class="text-lg font-bold text-slate-700">🧱 True Consolidated Asset Allocation Map is inactive</h3>
+                <p class="text-sm text-slate-400 font-semibold mt-1">To unlock interactive combined sector donuts and top stocks progress bars across all 12 funds combined, run the portfolio map script locally on your Mac:</p>
+                <div class="mt-4">
+                    <code class="bg-slate-200/60 px-4 py-2 rounded-xl text-slate-700 font-bold text-xs">.venv/bin/python portfolio_map_main.py</code>
+                </div>
+            </div>
+        </section>
 
         <!-- KPI Cards Grid -->
         <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -243,10 +294,78 @@ def main() -> int:
     <script id="portfolio-data" type="application/json">
         {json.dumps(aggregated_data)}
     </script>
+    <script id="combined-allocation-data" type="application/json">
+        {json.dumps(combined_allocation)}
+    </script>
 
     <script>
         const dataset = JSON.parse(document.getElementById('portfolio-data').textContent);
         console.log("Loaded full dataset records:", dataset.length);
+
+        // --- Populate Combined Allocation Map if Active ---
+        const combinedRaw = document.getElementById('combined-allocation-data').textContent;
+        const combined = combinedRaw && combinedRaw !== "null" ? JSON.parse(combinedRaw) : null;
+        
+        if (combined) {{
+            document.getElementById('combined-allocation-banner').classList.add('hidden');
+            document.getElementById('combined-allocation-section').classList.remove('hidden');
+            document.getElementById('allocation-cache-date').textContent = `Updated: ${{combined.last_updated}}`;
+            
+            // Build Stock Progress Bars
+            const stockContainer = document.getElementById('combined-stocks-list');
+            stockContainer.innerHTML = '';
+            
+            combined.stocks.slice(0, 6).forEach(st => {{
+                const stockDiv = document.createElement('div');
+                stockDiv.className = 'flex flex-col gap-1.5';
+                
+                // Normalizing the visual bar width based on highest stock weight
+                const maxPct = combined.stocks[0].weight || 100.0;
+                const progressWidth = (st.weight / maxPct) * 100.0;
+                
+                stockDiv.innerHTML = `
+                    <div class="flex justify-between text-xs font-bold text-slate-700">
+                        <span>${{st.name}}</span>
+                        <span>${{st.weight.toFixed(2)}}%</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-emerald-500 rounded-full" style="width: ${{progressWidth}}%"></div>
+                    </div>
+                `;
+                stockContainer.appendChild(stockDiv);
+            }});
+            
+            // Build Sector Donut Chart
+            const sectorLabels = combined.sectors.map(s => s.name);
+            const sectorWeights = combined.sectors.map(s => s.weight);
+            
+            new Chart(document.getElementById('chart-combined-sectors'), {{
+                type: 'doughnut',
+                data: {{
+                    labels: sectorLabels,
+                    datasets: [{{
+                        data: sectorWeights,
+                        backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#64748b'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }}]
+                }},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {{
+                        legend: {{ position: 'right', labels: {{ boxWidth: 10, font: {{ weight: 'bold', size: 10 }} }} }},
+                        tooltip: {{
+                            callbacks: {{
+                                label: function(ctx) {{
+                                    return ` ${{ctx.label}}: ${{ctx.raw.toFixed(2)}}%`;
+                                }}
+                            }}
+                        }}
+                    }}
+                }}
+            }});
+        }}
 
         // --- Helper formatting ---
         const fmtPct = (val) => (val !== null && val !== undefined) ? `${{val.toFixed(2)}}%` : 'n/a';

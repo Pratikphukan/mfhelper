@@ -1,0 +1,79 @@
+{
+  "last_updated": "2026-08-26 09:22:31",
+  "sectors": [
+    {
+      "name": "Equity",
+      "weight": 61.701188304969385
+    },
+    {
+      "name": "Cash & Cash Equivalents",
+      "weight": 28.77570925328381
+    },
+    {
+      "name": "Debt",
+      "weight": 9.626487784948152
+    }
+  ],
+  "stocks": [
+    {
+      "name": "SBI-ETF Gold",
+      "weight": 8.339150220272751
+    },
+    {
+      "name": "Schroder ISF Global Equity Alpha Class X1 Acc",
+      "weight": 8.165932947737636
+    },
+    {
+      "name": "Franklin U.S. Opportunities Fund, Class I (Acc)",
+      "weight": 7.9986435009934596
+    },
+    {
+      "name": "HDFC Bank Limited",
+      "weight": 2.443711931481716
+    },
+    {
+      "name": "ICICI Bank Limited",
+      "weight": 2.4422809613869427
+    },
+    {
+      "name": "Samvardhana Motherson International Ltd",
+      "weight": 1.222878916108315
+    },
+    {
+      "name": "State Bank of India",
+      "weight": 1.148344887409841
+    },
+    {
+      "name": "Bharti Airtel Ltd",
+      "weight": 1.123609762632721
+    },
+    {
+      "name": "Axis Bank Limited",
+      "weight": 1.0192801183015416
+    },
+    {
+      "name": "One 97 Communications Ltd",
+      "weight": 1.0072397940720823
+    },
+    {
+      "name": "TATA MONEY MARKET FUND",
+      "weight": 0.9853188287738167
+    },
+    {
+      "name": "Tech Mahindra Limited",
+      "weight": 0.8909872244648366
+    },
+    {
+      "name": "Eternal Limited",
+      "weight": 0.8895917707731483
+    },
+    {
+      "name": "Aurobindo Pharma Ltd",
+      "weight": 0.8533821659055006
+    },
+    {
+      "name": "Reliance Industries Ltd",
+      "weight": 0.8176246116686409
+    }
+  ]
+}

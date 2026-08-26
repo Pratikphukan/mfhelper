@@ -24,6 +24,9 @@ class FundConfig:
     # Optional asset category (e.g. "debt", "commodity", "equity").
     # Used to filter out false alerts on stable/non-equity asset classes.
     category: str | None = None
+    # Optional investment weight percentage in your total portfolio.
+    # Defaults to equal weighting if omitted.
+    weight: float | None = None
 
 
 @dataclass(frozen=True)
@@ -85,12 +88,21 @@ def load_funds(path: Path) -> list[FundConfig]:
         if category_raw is not None:
             category = str(category_raw).strip().lower() or None
 
+        weight_raw = entry.get("weight")
+        weight: float | None = None
+        if weight_raw is not None:
+            try:
+                weight = float(weight_raw)
+            except (TypeError, ValueError):
+                raise ValueError(f"{path}: fund #{i} has non-numeric 'weight': {weight_raw!r}")
+
         funds.append(FundConfig(
             code=code,
             name=name,
             expense_ratio_pct=expense_ratio_pct,
             groww_slug=groww_slug,
             category=category,
+            weight=weight,
         ))
     return funds
 
