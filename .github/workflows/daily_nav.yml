@@ -7,6 +7,15 @@ on:
     - cron: '0 5 * * TUE-SAT'
   workflow_dispatch: # Allows triggering the run manually from the GitHub Actions tab
 
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   run-scheduler:
     runs-on: ubuntu-latest
@@ -21,6 +30,7 @@ jobs:
         path: |
           data/last_nav.json
           data/sheet_columns.json
+          data/combined_portfolio_allocation.json
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
         restore-keys: |
           daily-nav-state-
@@ -53,10 +63,34 @@ jobs:
       run: |
         python main.py
 
+    - name: Run Consolidated Portfolio Map
+      run: |
+        python portfolio_map_main.py
+
+    - name: Compile Web Dashboard
+      run: |
+        python dashboard_main.py
+
     - name: Save Daily NAV State Cache
       uses: actions/cache/save@v4
       with:
         path: |
           data/last_nav.json
           data/sheet_columns.json
+          data/combined_portfolio_allocation.json
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
+
+    - name: Copy dashboard to server index
+      run: cp dashboard.html index.html
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v5
+
+    - name: Upload Pages Artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: '.'
+
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
