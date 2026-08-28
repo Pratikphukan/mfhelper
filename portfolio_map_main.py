@@ -159,6 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     # 5. Fetch live holdings and aggregate weights
     consolidated_stocks = {}
     consolidated_sectors = {}
+    fund_holdings_dict = {}
     
     for fund in funds:
         mf_id = mapped_ids.get(fund.code)
@@ -169,6 +170,16 @@ def main(argv: list[str] | None = None) -> int:
             
         try:
             holdings = fetch_fund_holdings(mf_id)
+            fund_holdings_dict[fund.code] = [
+                {
+                    "company_name": h.company_name,
+                    "allocation_pct": h.allocation_pct,
+                    "sid": h.sid,
+                    "ticker": h.ticker,
+                    "instrument_type": h.instrument_type
+                }
+                for h in holdings
+            ]
             for h in holdings:
                 # Aggregate Stock Weights
                 # Formula: Combined Stock Weight = (Fund Weight / 100) * Stock Weight inside Fund
@@ -256,7 +267,8 @@ def main(argv: list[str] | None = None) -> int:
         cache_payload = {
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "sectors": [{"name": k, "weight": v} for k, v in sectors_sorted],
-            "stocks": [{"name": s["company_name"], "weight": s["combined_weight"]} for s in stocks_sorted[:15]]
+            "stocks": [{"name": s["company_name"], "weight": s["combined_weight"]} for s in stocks_sorted[:15]],
+            "fund_holdings": fund_holdings_dict
         }
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         with CACHE_FILE_PATH.open("w", encoding="utf-8") as f:

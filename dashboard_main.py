@@ -113,7 +113,13 @@ def main() -> int:
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-6 mb-8">
             <div>
                 <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">📈 MFHelper Portfolio Dashboard</h1>
-                <p class="text-slate-500 mt-1 text-sm">Interactive performance & risk metrics analyzer across all mutual funds. Click any row in the table below to explore its nested yearly and rolling returns!</p>
+                <p class="text-slate-500 mt-1 text-sm pr-4">Interactive performance & risk metrics analyzer. Click any row in the table below to explore, or view your overall portfolio overlap matrix.</p>
+                <div class="mt-4 flex gap-4">
+                    <button id="btn-open-overlap" onclick="openOverlapModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-2.5 px-5 rounded-xl shadow-sm focus:outline-none transition-all flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        🔍 View Portfolio Overlap Matrix
+                    </button>
+                </div>
             </div>
             <div class="bg-white border border-slate-200 px-4 py-3 rounded-xl shadow-sm text-right">
                 <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Last updated (IST)</div>
@@ -286,6 +292,38 @@ def main() -> int:
             <!-- Modal Content -->
             <div class="flex-grow p-6 overflow-y-auto bg-white" id="modal-content">
                 <!-- Dynamically populated tab content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlap Matrix Modal -->
+    <div id="overlap-modal-container" class="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-50 flex justify-center items-center opacity-0 pointer-events-none transition-opacity duration-300">
+        <div id="overlap-modal-panel" class="w-full max-w-6xl bg-white h-[90vh] rounded-2xl shadow-2xl flex flex-col translate-y-12 transition-transform duration-300 ease-out border border-slate-200 overflow-hidden">
+            <!-- Header -->
+            <div class="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <div>
+                    <h3 class="text-xl font-bold text-slate-900 leading-tight">🔍 Mutual Fund Portfolio Overlap Analyzer</h3>
+                    <p class="text-xs text-slate-400 font-bold mt-1 uppercase tracking-wider">Computes stock-level intersections. Click on any cell in the grid to see the exact shared stocks!</p>
+                </div>
+                <button onclick="closeOverlapModal()" class="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 p-2 rounded-lg focus:outline-none transition-all">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <!-- Body -->
+            <div class="flex-grow flex flex-col lg:flex-row overflow-hidden">
+                <!-- Left: Scrollable Matrix Grid -->
+                <div class="lg:w-7/12 p-6 overflow-auto border-r border-slate-100 bg-white">
+                    <div class="min-w-[600px]" id="overlap-matrix-container">
+                        <!-- Javascript will dynamically build matrix grid -->
+                    </div>
+                </div>
+                <!-- Right: Overlap Details Panel -->
+                <div class="lg:w-5/12 p-6 flex flex-col bg-slate-50 overflow-y-auto">
+                    <h4 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-4" id="overlap-details-title">Select a cell in the matrix to view stock-level details</h4>
+                    <div class="space-y-4 flex-grow" id="overlap-details-body">
+                        <div class="text-slate-400 text-center py-12 font-medium">Click on any colored cell in the matrix grid (e.g. intersecting Axis and SBI) to instantly reveal their shared stocks and allocation weights here.</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -720,6 +758,228 @@ def main() -> int:
                     </div>
                 `;
             }}
+        }}
+
+        // --- OVERLAP MATRIX MODAL JS ENGINE ---
+        function openOverlapModal() {{
+            const container = document.getElementById('overlap-modal-container');
+            const panel = document.getElementById('overlap-modal-panel');
+            
+            container.classList.remove('opacity-0', 'pointer-events-none');
+            panel.classList.remove('translate-y-12');
+            
+            // Generate the matrix dynamically if not already drawn
+            drawOverlapMatrix();
+        }}
+
+        function closeOverlapModal() {{
+            const container = document.getElementById('overlap-modal-container');
+            const panel = document.getElementById('overlap-modal-panel');
+            
+            container.classList.add('opacity-0', 'pointer-events-none');
+            panel.classList.add('translate-y-12');
+        }}
+
+        // Close on background click
+        document.getElementById('overlap-modal-container').onclick = function(e) {{
+            if (e.target === this) closeOverlapModal();
+        }};
+
+        function calculatePairwiseOverlap(holdingsA, holdingsB) {{
+            if (!holdingsA || !holdingsB) return {{ total: 0.0, stocks: [] }};
+            
+            const mapB = {{}};
+            holdingsB.forEach(h => {{
+                const key = h.sid ? h.sid : h.company_name.toLowerCase().trim();
+                mapB[key] = h;
+            }});
+            
+            let overlap_pct = 0.0;
+            const overlappingStocks = [];
+            
+            holdingsA.forEach(hA => {{
+                const keyA = hA.sid ? hA.sid : hA.company_name.toLowerCase().trim();
+                if (mapB[keyA]) {{
+                    const hB = mapB[keyA];
+                    const intersection = Math.min(hA.allocation_pct, hB.allocation_pct);
+                    overlap_pct += intersection;
+                    overlappingStocks.push({{
+                        name: hA.company_name,
+                        ticker: hA.ticker || 'n/a',
+                        alloc_a: hA.allocation_pct,
+                        alloc_b: hB.allocation_pct,
+                        intersection: intersection
+                    }});
+                }}
+            }});
+            
+            overlappingStocks.sort((a, b) => b.intersection - a.intersection);
+            return {{
+                total: parseFloat(overlap_pct.toFixed(2)),
+                stocks: overlappingStocks
+            }};
+        }}
+
+        function drawOverlapMatrix() {{
+            const container = document.getElementById('overlap-matrix-container');
+            container.innerHTML = '';
+            
+            // Extract funds that have holdings
+            if (!combined || !combined.fund_holdings) {{
+                container.innerHTML = '<div class="text-slate-400 font-bold text-center py-12">No fund holdings data found in cache! Please run portfolio_map_main.py locally first.</div>';
+                return;
+            }}
+            
+            // Map code to displays
+            const fundsWithHoldings = dataset.filter(f => combined.fund_holdings[f.scheme_code]);
+            if (fundsWithHoldings.length === 0) {{
+                container.innerHTML = '<div class="text-slate-400 font-bold text-center py-12">No matching fund portfolios found!</div>';
+                return;
+            }}
+            
+            // Create Table Grid
+            const table = document.createElement('table');
+            table.className = 'w-full text-center border-collapse border border-slate-200 text-xs font-semibold';
+            
+            // 1. Header row
+            const thead = document.createElement('thead');
+            const headerTr = document.createElement('tr');
+            headerTr.className = 'bg-slate-100 border-b border-slate-200';
+            
+            const cornerTh = document.createElement('th');
+            cornerTh.className = 'p-3 text-left font-extrabold text-slate-500 border border-slate-200';
+            cornerTh.textContent = 'Fund Name / Code';
+            headerTr.appendChild(cornerTh);
+            
+            fundsWithHoldings.forEach(f => {{
+                const th = document.createElement('th');
+                th.className = 'p-3 font-extrabold text-slate-500 border border-slate-200';
+                th.textContent = f.scheme_name.substring(0, 10) + '...';
+                th.title = f.scheme_name;
+                headerTr.appendChild(th);
+            }});
+            thead.appendChild(headerTr);
+            table.appendChild(thead);
+            
+            // 2. Rows
+            const tbody = document.createElement('tbody');
+            fundsWithHoldings.forEach((fundA, idxA) => {{
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-slate-200 hover:bg-slate-50/50';
+                
+                // Left Label
+                const tdLabel = document.createElement('td');
+                tdLabel.className = 'p-3 text-left font-bold text-slate-800 border border-slate-200 bg-slate-50';
+                tdLabel.textContent = fundA.scheme_name.substring(0, 18) + '...';
+                tdLabel.title = fundA.scheme_name;
+                tr.appendChild(tdLabel);
+                
+                // Cells
+                fundsWithHoldings.forEach((fundB, idxB) => {{
+                    const tdCell = document.createElement('td');
+                    tdCell.className = 'p-3 border border-slate-200 transition-colors font-bold cursor-pointer';
+                    
+                    if (fundA.scheme_code === fundB.scheme_code) {{
+                        tdCell.className += ' bg-slate-100 text-slate-500';
+                        tdCell.textContent = '100.0%';
+                    }} else {{
+                        const holdingsA = combined.fund_holdings[fundA.scheme_code];
+                        const holdingsB = combined.fund_holdings[fundB.scheme_code];
+                        const overlapRes = calculatePairwiseOverlap(holdingsA, holdingsB);
+                        
+                        tdCell.textContent = `${{overlapRes.total.toFixed(2)}}%`;
+                        
+                        // Apply heatmap colors
+                        if (overlapRes.total >= 20.0) {{
+                            tdCell.className += ' bg-rose-50 hover:bg-rose-100 text-rose-800';
+                        }} else if (overlapRes.total >= 10.0) {{
+                            tdCell.className += ' bg-amber-50 hover:bg-amber-100 text-amber-800';
+                        }} else {{
+                            tdCell.className += ' bg-emerald-50 hover:bg-emerald-100 text-emerald-800';
+                        }}
+                        
+                        tdCell.onclick = () => showOverlapDetails(fundA, fundB, overlapRes);
+                    }}
+                    tr.appendChild(tdCell);
+                }});
+                tbody.appendChild(tr);
+            }});
+            table.appendChild(tbody);
+            container.appendChild(table);
+        }}
+
+        function showOverlapDetails(fundA, fundB, overlapRes) {{
+            document.getElementById('overlap-details-title').innerHTML = `
+                🔥 OVERLAP DETAILED BREAKDOWN: <br>
+                <span class="text-slate-800 font-extrabold">${{fundA.scheme_name}}</span> <br>
+                <span class="text-slate-400 font-bold text-xs lowercase">vs</span> <br>
+                <span class="text-slate-800 font-extrabold">${{fundB.scheme_name}}</span> <br>
+                <div class="mt-2 text-rose-600 font-black text-sm">Combined Overlap: ${{overlapRes.total.toFixed(2)}}%</div>
+            `;
+            
+            const detailContainer = document.getElementById('overlap-details-body');
+            detailContainer.innerHTML = '';
+            
+            if (overlapRes.stocks.length === 0) {{
+                detailContainer.innerHTML = '<div class="text-slate-400 text-center py-12">No overlapping stock holdings found!</div>';
+                return;
+            }}
+            
+            const listContainer = document.createElement('div');
+            listContainer.className = 'flex flex-col gap-4 w-full text-xs font-semibold text-slate-700 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm';
+            
+            // Header indicators
+            const listHeader = document.createElement('div');
+            listHeader.className = 'flex justify-between border-b border-slate-200 pb-2 mb-2 font-black text-slate-400 uppercase text-[10px] tracking-wider';
+            listHeader.innerHTML = '<span>Stock Holding Name</span><span>Overlap Contribution</span>';
+            listContainer.appendChild(listHeader);
+
+            // Compute 90% relevance rule in JS!
+            const targetOverlapSum = 0.90 * overlapRes.total;
+            let cumulativeOverlap = 0.0;
+            const topStocks = [];
+            const remainingStocks = [];
+            
+            overlapRes.stocks.forEach(st => {{
+                if (cumulativeOverlap < targetOverlapSum) {{
+                    topStocks.push(st);
+                    cumulativeOverlap += st.intersection;
+                }} else {{
+                    remainingStocks.push(st);
+                }}
+            }});
+            
+            topStocks.forEach(st => {{
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'flex flex-col gap-1';
+                
+                const barWidth = (st.intersection / topStocks[0].intersection) * 100.0;
+                
+                itemDiv.innerHTML = `
+                    <div class="flex justify-between font-bold">
+                        <span>${{st.name}} <span class="text-[10px] text-slate-400 font-bold">(${{st.ticker}})</span></span>
+                        <span class="font-extrabold text-slate-900">${{st.intersection.toFixed(2)}}%</span>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-400 font-semibold mb-1">
+                        <span>Allocation A: ${{st.alloc_a.toFixed(2)}}%</span>
+                        <span>Allocation B: ${{st.alloc_b.toFixed(2)}}%</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full bg-rose-500 rounded-full" style="width: ${{barWidth}}%"></div>
+                    </div>
+                `;
+                listContainer.appendChild(itemDiv);
+            }});
+            
+            if (remainingStocks.length > 0) {{
+                const otherDiv = document.createElement('div');
+                otherDiv.className = 'border-t border-slate-100 pt-3 text-[11px] text-slate-400 leading-normal font-semibold';
+                const names = remainingStocks.map(s => s.name).join(', ');
+                otherDiv.innerHTML = `<strong>Other overlapping stocks:</strong> ${{names}}`;
+                listContainer.appendChild(otherDiv);
+            }}
+            
+            detailContainer.appendChild(listContainer);
         }}
     </script>
 </body>
