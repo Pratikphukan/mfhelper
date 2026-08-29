@@ -424,7 +424,7 @@ def main() -> int:
             const cagr_3y = tr["3y_cagr_pct"];
             const sip_3y = sip["3y_xirr_pct"];
             const sharpe_3y = ra["sharpe_3y"];
-            const sd_3y = risk["sd_3y_pct"];
+            const sd_3y = risk["sd_3y_annualized_pct"];
 
             if (cagr_3y && cagr_3y > topCagr) {{
                 topCagr = cagr_3y; topCagrName = fund.scheme_name;
@@ -435,8 +435,8 @@ def main() -> int:
             if (ra.sharpe_3y && ra.sharpe_3y > topSharpe) {{
                 topSharpe = ra.sharpe_3y; topSharpeName = fund.scheme_name;
             }}
-            if (risk.sd_3y_pct && risk.sd_3y_pct < lowestSd) {{
-                lowestSd = risk.sd_3y_pct; lowestSdName = fund.scheme_name;
+            if (sd_3y && sd_3y < lowestSd) {{
+                lowestSd = sd_3y; lowestSdName = fund.scheme_name;
             }}
         }});
 
@@ -473,12 +473,12 @@ def main() -> int:
                     <div class="truncate max-w-[320px]">${{fund.scheme_name}}</div>
                     <span class="text-xs text-slate-400 font-bold uppercase">AMFI: ${{fund.scheme_code}}</span>
                 </td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr["1y_abs_pct"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr["1y_absolute_pct"])}}</td>
                 <td class="py-3 px-4 text-center font-bold text-slate-900">${{fmtPct(tr["3y_cagr_pct"])}}</td>
                 <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr["5y_cagr_pct"])}}</td>
                 <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip["3y_xirr_pct"])}}</td>
                 <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(sip["5y_xirr_pct"])}}</td>
-                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(risk["sd_3y_pct"])}}</td>
+                <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(risk["sd_3y_annualized_pct"])}}</td>
                 <td class="py-3 px-4 text-center font-bold text-amber-700">${{fmtNum(ra["sharpe_3y"])}}</td>
                 <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra["sortino_3y"])}}</td>
                 <td class="py-3 px-4 text-center text-slate-600">${{fmtNum(ra["calmar_3y"])}}</td>
@@ -488,9 +488,9 @@ def main() -> int:
 
         // --- CHART 1: Efficient Frontier (Scatter Plot) ---
         const scatterData = dataset
-            .filter(f => f.risk?.["sd_3y_pct"] !== undefined && f.trailing_returns?.["3y_cagr_pct"] !== undefined)
+            .filter(f => f.risk?.["sd_3y_annualized_pct"] !== undefined && f.trailing_returns?.["3y_cagr_pct"] !== undefined)
             .map(f => ({{
-                x: f.risk["sd_3y_pct"],
+                x: f.risk["sd_3y_annualized_pct"],
                 y: f.trailing_returns["3y_cagr_pct"],
                 label: f.scheme_name
             }}));
