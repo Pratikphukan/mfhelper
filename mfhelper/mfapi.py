@@ -132,11 +132,12 @@ def _fetch_payload(
 def fetch_history(
     code: str,
     *,
+    limit: int | None = None,
     timeout: tuple[int, int] = HTTP_TIMEOUT,
     attempts: int = RETRY_ATTEMPTS,
     backoff_seconds: float = RETRY_BACKOFF_SECONDS,
 ) -> MfapiResult | None:
-    """Return mfapi.in's full NAV history for ``code``, or ``None`` on any failure.
+    """Return mfapi.in's NAV history for ``code``, optionally sliced, or ``None`` on any failure.
 
     Callers should treat ``None`` as "not available from this source" and
     react accordingly (typically: skip the metric and log).
@@ -155,6 +156,9 @@ def fetch_history(
     raw_data = payload.get("data") or []
     if not raw_data:
         return None
+
+    if limit is not None:
+        raw_data = raw_data[:limit]
 
     history: list[NavHistoryPoint] = []
     for entry in raw_data:

@@ -149,7 +149,7 @@ def run(args: argparse.Namespace) -> int:
 
     for fund in funds:
         amfi_record = nav_index.get(fund.code)
-        mfapi_result = mfapi_fetch_history(fund.code)
+        mfapi_result = mfapi_fetch_history(fund.code, limit=365)
         if mfapi_result is not None:
             histories_by_code[fund.code] = mfapi_result
 
