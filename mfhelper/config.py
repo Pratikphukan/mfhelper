@@ -27,6 +27,9 @@ class FundConfig:
     # Optional investment weight percentage in your total portfolio.
     # Defaults to equal weighting if omitted.
     weight: float | None = None
+    # Optional boolean flag to set active/inactive status.
+    # Defaults to True. Inactive funds are ignored in daily tracking loops.
+    active: bool = True
 
 
 @dataclass(frozen=True)
@@ -96,6 +99,11 @@ def load_funds(path: Path) -> list[FundConfig]:
             except (TypeError, ValueError):
                 raise ValueError(f"{path}: fund #{i} has non-numeric 'weight': {weight_raw!r}")
 
+        active_raw = entry.get("active")
+        active: bool = True
+        if active_raw is not None:
+            active = bool(active_raw)
+
         funds.append(FundConfig(
             code=code,
             name=name,
@@ -103,6 +111,7 @@ def load_funds(path: Path) -> list[FundConfig]:
             groww_slug=groww_slug,
             category=category,
             weight=weight,
+            active=active,
         ))
     return funds
 

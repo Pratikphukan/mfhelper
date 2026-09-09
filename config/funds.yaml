@@ -23,6 +23,7 @@ funds:
   - code: "140196"
     name: "Edelweiss Liquid Fund - Direct Plan - Growth Option"
     category: "debt"
+    active: false
   - code: "119721"
     name: "SBI LARGE & MIDCAP FUND -DIRECT PLAN -Growth"
   - code: "135781"

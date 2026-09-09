@@ -148,6 +148,17 @@ def run(args: argparse.Namespace) -> int:
     histories_by_code: dict[str, MfapiResult] = {}
 
     for fund in funds:
+        if not fund.active:
+            log.info("  [ACTIVE] Fund %s is flagged as inactive/muted. Skipping NAV and alert processing.", fund.code)
+            values_by_code[fund.code] = NavValue(
+                nav=None,
+                day_change_pct=None,
+                dist_52w_pct=None,
+                dist_200d_sma_pct=None,
+                rsi=None,
+            )
+            continue
+
         amfi_record = nav_index.get(fund.code)
         mfapi_result = mfapi_fetch_history(fund.code, limit=365)
         if mfapi_result is not None:
