@@ -250,6 +250,7 @@ def main() -> int:
                     <thead>
                         <tr class="bg-slate-100 text-slate-500 uppercase text-xs font-bold tracking-wider border-b border-slate-200">
                             <th class="py-3.5 px-4 font-extrabold text-slate-600">Fund Name / Code</th>
+                            <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">3Y Beat Rate</th>
                             <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">1Y Abs</th>
                             <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">3Y CAGR</th>
                             <th class="py-3.5 px-4 text-center font-extrabold text-slate-600">5Y CAGR</th>
@@ -288,6 +289,7 @@ def main() -> int:
                 <button id="tab-btn-trailing" onclick="switchTab('trailing')" class="py-4 border-b-2 border-emerald-600 text-emerald-600 focus:outline-none transition-all">Trailing & Extremes</button>
                 <button id="tab-btn-yearly" onclick="switchTab('yearly')" class="py-4 border-b-2 border-transparent hover:text-slate-600 focus:outline-none transition-all">Yearly Returns</button>
                 <button id="tab-btn-rolling" onclick="switchTab('rolling')" class="py-4 border-b-2 border-transparent hover:text-slate-600 focus:outline-none transition-all">Rolling Analysis</button>
+                <button id="tab-btn-benchmark" onclick="switchTab('benchmark')" class="py-4 border-b-2 border-transparent hover:text-slate-600 focus:outline-none transition-all">Benchmark Audit</button>
             </div>
             <!-- Modal Content -->
             <div class="flex-grow p-6 overflow-y-auto bg-white" id="modal-content">
@@ -409,6 +411,20 @@ def main() -> int:
         const fmtPct = (val) => (val !== null && val !== undefined) ? `${{val.toFixed(2)}}%` : 'n/a';
         const fmtNum = (val) => (val !== null && val !== undefined) ? val.toFixed(2) : 'n/a';
 
+        function fmtBeatRateBadge(vs_bench) {{
+            if (!vs_bench || !vs_bench.beat_rate_pct || vs_bench.beat_rate_pct["3y_window"] === null || vs_bench.beat_rate_pct["3y_window"] === undefined) {{
+                return '<span class="text-slate-400 font-semibold text-xs">n/a (Skipped)</span>';
+            }}
+            const rate = vs_bench.beat_rate_pct["3y_window"];
+            if (rate >= 70.0) {{
+                return `<span class="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-md font-extrabold text-xs inline-block">🟢 ${{rate.toFixed(1)}}%</span>`;
+            }} else if (rate >= 50.0) {{
+                return `<span class="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-md font-extrabold text-xs inline-block">🟡 ${{rate.toFixed(1)}}%</span>`;
+            }} else {{
+                return `<span class="bg-rose-100 text-rose-800 px-2.5 py-1 rounded-md font-extrabold text-xs inline-block">🔴 ${{rate.toFixed(1)}}%</span>`;
+            }}
+        }}
+
         // --- Populate KPIs ---
         let topCagr = -Infinity, topCagrName = '-';
         let topSip = -Infinity, topSipName = '-';
@@ -473,6 +489,7 @@ def main() -> int:
                     <div class="truncate max-w-[320px]">${{fund.scheme_name}}</div>
                     <span class="text-xs text-slate-400 font-bold uppercase">AMFI: ${{fund.scheme_code}}</span>
                 </td>
+                <td class="py-3 px-4 text-center font-bold">${{fmtBeatRateBadge(fund.vs_benchmark)}}</td>
                 <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr["1y_absolute_pct"])}}</td>
                 <td class="py-3 px-4 text-center font-bold text-slate-900">${{fmtPct(tr["3y_cagr_pct"])}}</td>
                 <td class="py-3 px-4 text-center text-slate-600">${{fmtPct(tr["5y_cagr_pct"])}}</td>
@@ -634,7 +651,7 @@ def main() -> int:
             activeTab = tabName;
             
             // Update tab button styles
-            const tabs = ['trailing', 'yearly', 'rolling'];
+            const tabs = ['trailing', 'yearly', 'rolling', 'benchmark'];
             tabs.forEach(t => {{
                 const btn = document.getElementById(`tab-btn-${{t}}`);
                 if (t === tabName) {{
@@ -757,6 +774,61 @@ def main() -> int:
                         </div>
                     </div>
                 `;
+            }} else if (tabName === 'benchmark') {{
+                const vb = fund.vs_benchmark;
+                if (!vb || !vb.benchmark_name) {{
+                    contentDiv.innerHTML = `
+                        <div class="text-center py-12 text-slate-400 font-bold">
+                            <p class="text-base text-slate-600">No Benchmark Index mapped for this fund.</p>
+                            <p class="text-xs text-slate-400 font-semibold mt-1">Non-equity, liquid, or international FoF funds skip domestic index benchmarking intentionally.</p>
+                        </div>
+                    `;
+                }} else {{
+                    const br = vb.beat_rate_pct || {{}};
+                    const b3 = br["3y_window"];
+                    const b5 = br["5y_window"];
+                    const ir3 = vb.information_ratio_3y;
+                    const active3 = vb.trailing_active_returns?.["3y_cagr_pct"];
+                    
+                    contentDiv.innerHTML = `
+                        <div class="space-y-6">
+                            <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                                <span class="text-xs font-black uppercase text-slate-400 tracking-wider">Benchmark Index</span>
+                                <h4 class="text-xl font-extrabold text-slate-900 mt-1">${{vb.benchmark_name}} (${{vb.variant || 'PR'}})</h4>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">3Y & 5Y Rolling Beat Rates</h4>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <div class="text-xs text-slate-400 font-semibold">3-Year Rolling Beat Rate</div>
+                                        <div class="text-2xl font-black mt-1 text-emerald-600">${{fmtPct(b3)}}</div>
+                                        <p class="text-[11px] text-slate-400 mt-1 font-semibold">% of 3Y windows beating the index</p>
+                                    </div>
+                                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <div class="text-xs text-slate-400 font-semibold">5-Year Rolling Beat Rate</div>
+                                        <div class="text-2xl font-black mt-1 text-emerald-600">${{fmtPct(b5)}}</div>
+                                        <p class="text-[11px] text-slate-400 mt-1 font-semibold">% of 5Y windows beating the index</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-black uppercase text-slate-400 tracking-wider mb-3">Manager Skill & Excess Alpha</h4>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <div class="text-xs text-slate-400 font-semibold">3Y Information Ratio (IR)</div>
+                                        <div class="text-xl font-bold mt-1 text-slate-800">${{fmtNum(ir3)}}</div>
+                                        <p class="text-[11px] text-slate-400 mt-1 font-semibold">Alpha per unit of active risk</p>
+                                    </div>
+                                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                        <div class="text-xs text-slate-400 font-semibold">3Y Active Excess Return</div>
+                                        <div class="text-xl font-bold mt-1 text-indigo-600">${{fmtPct(active3)}}</div>
+                                        <p class="text-[11px] text-slate-400 mt-1 font-semibold">Fund CAGR minus Index CAGR</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }}
             }}
         }}
 
