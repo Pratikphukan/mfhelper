@@ -65,7 +65,7 @@ jobs:
 
     - name: Run Performance Returns Analyzer
       run: |
-        python returns_main.py --no-benchmark
+        python returns_main.py
 
     - name: Run Consolidated Portfolio Map
       run: |
