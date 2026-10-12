@@ -171,34 +171,35 @@ def _print_returns_summary(payloads: list[dict]) -> None:
     if not payloads:
         return
         
-    print("\n" + "=" * 110)
+    width = 95
+    print("\n" + "=" * width)
     print("📈 PORTFOLIO TRAILING PERFORMANCE SUMMARY")
-    print("=" * 110)
-    print(f"{'Fund Name':<45} | {'1Y (Abs)':<10} | {'3Y (CAGR)':<12} | {'5Y (CAGR)':<12} | {'10Y (CAGR)':<12} | {'Inception':<12}")
-    print("-" * 110)
+    print("=" * width)
+    print(f"{'Fund Name':<38} | {'1Y (Abs)':<8} | {'3Y CAGR':<9} | {'5Y CAGR':<9} | {'10Y CAGR':<9} | {'Inception':<9}")
+    print("-" * width)
     for p in payloads:
         tr = p.get("trailing_returns") or {}
-        name = p.get("scheme_name", "?")[:43]
+        name = p.get("scheme_name", "?")[:36]
         
         def f_val(val):
             return f"{val:.2f}%" if isinstance(val, (int, float)) else "n/a"
             
-        y1 = f_val(tr.get("1y_abs_pct"))
+        y1 = f_val(tr.get("1y_absolute_pct"))
         y3 = f_val(tr.get("3y_cagr_pct"))
         y5 = f_val(tr.get("5y_cagr_pct"))
         y10 = f_val(tr.get("10y_cagr_pct"))
         si = f_val(tr.get("since_inception_cagr_pct"))
-        print(f"{name:<45} | {y1:<10} | {y3:<12} | {y5:<12} | {y10:<12} | {si:<12}")
-    print("=" * 110)
+        print(f"{name:<38} | {y1:<8} | {y3:<9} | {y5:<9} | {y10:<9} | {si:<9}")
+    print("=" * width)
 
-    print("\n" + "=" * 110)
+    print("\n" + "=" * width)
     print("🛒 HYPOTHETICAL MONTHLY SIP XIRR SUMMARY (Rs. 10,000/month)")
-    print("=" * 110)
-    print(f"{'Fund Name':<45} | {'3Y SIP XIRR':<15} | {'5Y SIP XIRR':<15} | {'10Y SIP XIRR':<15}")
-    print("-" * 110)
+    print("=" * width)
+    print(f"{'Fund Name':<38} | {'3Y SIP XIRR':<15} | {'5Y SIP XIRR':<15} | {'10Y SIP XIRR':<15}")
+    print("-" * width)
     for p in payloads:
         sip = p.get("hypothetical_sip_xirr") or {}
-        name = p.get("scheme_name", "?")[:43]
+        name = p.get("scheme_name", "?")[:36]
         
         def f_val(val):
             return f"{val:.2f}%" if isinstance(val, (int, float)) else "n/a"
@@ -206,18 +207,18 @@ def _print_returns_summary(payloads: list[dict]) -> None:
         s3 = f_val(sip.get("3y_xirr_pct"))
         s5 = f_val(sip.get("5y_xirr_pct"))
         s10 = f_val(sip.get("10y_xirr_pct"))
-        print(f"{name:<45} | {s3:<15} | {s5:<15} | {s10:<15}")
-    print("=" * 110)
+        print(f"{name:<38} | {s3:<15} | {s5:<15} | {s10:<15}")
+    print("=" * width)
 
-    print("\n" + "=" * 110)
+    print("\n" + "=" * width)
     print("🛡️ RISK METRICS & PERFORMANCE RATIOS (3Y Window)")
-    print("=" * 110)
-    print(f"{'Fund Name':<45} | {'Ann. SD %':<12} | {'Sharpe':<12} | {'Sortino':<12} | {'Calmar':<12}")
-    print("-" * 110)
+    print("=" * width)
+    print(f"{'Fund Name':<38} | {'Ann. SD %':<10} | {'Sharpe':<10} | {'Sortino':<10} | {'Calmar':<10}")
+    print("-" * width)
     for p in payloads:
         risk = p.get("risk") or {}
         ra = p.get("risk_adjusted") or {}
-        name = p.get("scheme_name", "?")[:43]
+        name = p.get("scheme_name", "?")[:36]
         
         def f_val(val):
             return f"{val:.2f}%" if isinstance(val, (int, float)) else "n/a"
@@ -225,12 +226,12 @@ def _print_returns_summary(payloads: list[dict]) -> None:
         def f_rat(val):
             return f"{val:.2f}" if isinstance(val, (int, float)) else "n/a"
             
-        sd = f_val(risk.get("sd_3y_pct"))
+        sd = f_val(risk.get("sd_3y_annualized_pct"))
         sharpe = f_rat(ra.get("sharpe_3y"))
         sortino = f_rat(ra.get("sortino_3y"))
         calmar = f_rat(ra.get("calmar_3y"))
-        print(f"{name:<45} | {sd:<12} | {sharpe:<12} | {sortino:<12} | {calmar:<12}")
-    print("=" * 110)
+        print(f"{name:<38} | {sd:<10} | {sharpe:<10} | {sortino:<10} | {calmar:<10}")
+    print("=" * width)
 
 
 def run(args: argparse.Namespace) -> int:
