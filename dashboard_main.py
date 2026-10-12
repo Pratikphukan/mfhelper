@@ -114,10 +114,14 @@ def main() -> int:
             <div>
                 <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight">📈 MFHelper Portfolio Dashboard</h1>
                 <p class="text-slate-500 mt-1 text-sm pr-4">Interactive performance & risk metrics analyzer. Click any row in the table below to explore, or view your overall portfolio overlap matrix.</p>
-                <div class="mt-4 flex gap-4">
+                <div class="mt-4 flex flex-wrap gap-4">
                     <button id="btn-open-overlap" onclick="openOverlapModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-2.5 px-5 rounded-xl shadow-sm focus:outline-none transition-all flex items-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                         🔍 View Portfolio Overlap Matrix
+                    </button>
+                    <button id="btn-cloud-refresh" onclick="triggerCloudRefresh()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm py-2.5 px-5 rounded-xl shadow-sm focus:outline-none transition-all flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                        🔄 Refresh Cloud Data
                     </button>
                 </div>
             </div>
@@ -341,6 +345,47 @@ def main() -> int:
     <script>
         const dataset = JSON.parse(document.getElementById('portfolio-data').textContent);
         console.log("Loaded full dataset records:", dataset.length);
+
+        // --- TRIGGER CLOUD REFRESH VIA GITHUB REST API ---
+        async function triggerCloudRefresh() {{
+            let token = localStorage.getItem('gh_pat_token');
+            if (!token) {{
+                token = prompt("Enter your GitHub Personal Access Token (PAT) with 'actions:write' scope to trigger cloud runs:");
+                if (!token) return;
+                localStorage.setItem('gh_pat_token', token.trim());
+            }}
+
+            const btn = document.getElementById('btn-cloud-refresh');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Triggering Cloud Runner...';
+            btn.disabled = true;
+
+            try {{
+                const response = await fetch('https://api.github.com/repos/Pratikphukan/mfhelper/actions/workflows/daily_nav.yml/dispatches', {{
+                    method: 'POST',
+                    headers: {{
+                        'Accept': 'application/vnd.github+json',
+                        'Authorization': `Bearer ${{token.trim()}}`,
+                        'Content-Type': 'application/json',
+                    }},
+                    body: JSON.stringify({{ ref: 'main' }})
+                }});
+
+                if (response.status === 204) {{
+                    alert("🚀 SUCCESS! GitHub Cloud Runner triggered! Your Google Sheet and Web Dashboard will be fully updated in 1-2 minutes.");
+                }} else if (response.status === 401 || response.status === 403) {{
+                    alert("❌ Authorization failed! Your GitHub token may be invalid or missing 'actions:write' permissions.");
+                    localStorage.removeItem('gh_pat_token');
+                }} else {{
+                    alert(`⚠️ Error triggering cloud run (HTTP ${{response.status}}). Please check console.`);
+                }}
+            }} catch (err) {{
+                alert(`❌ Network error: ${{err.message}}`);
+            }} finally {{
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }}
+        }}
 
         // --- Populate Combined Allocation Map if Active ---
         const combinedRaw = document.getElementById('combined-allocation-data').textContent;
