@@ -41,3 +41,6 @@ funds:
     name: "Bandhan Small Cap Fund Direct Growth"
   - code: "149383"
     name: "Axis Multicap Fund - Direct Growth"
+  - code: "113076"
+    name: "ICICI Prudential Gold ETF"
+    category: "gold"
