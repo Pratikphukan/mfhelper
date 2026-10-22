@@ -24,6 +24,7 @@ import sys
 import yaml
 
 from mfhelper.config import load_settings
+from mfhelper.gold_etf_sheet import GoldEtfSheetWriter, GOLD_ETF_TAB_DEFAULT
 from mfhelper.mfapi import fetch_history
 from mfhelper.returns_calc import compute_fund_returns
 
@@ -34,6 +35,8 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 
 GOLD_ETFS_PATH_DEFAULT = CONFIG_DIR / "gold_etfs.yaml"
 SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
+CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
+TOKEN_PATH = DATA_DIR / "token.json"
 
 
 def _configure_logging() -> None:
@@ -180,6 +183,26 @@ def main(argv: list[str] | None = None) -> int:
 
     # Print summary tables to terminal
     _print_gold_etf_summary(successful_payloads)
+
+    # Write to Google Sheet
+    try:
+        settings = load_settings(SETTINGS_PATH)
+        sheet_id = settings.google_sheet.spreadsheet_id
+        if sheet_id:
+            log.info("Writing Gold ETFs report to Google Sheet spreadsheet ID %s...", sheet_id)
+            writer = GoldEtfSheetWriter(
+                spreadsheet_id=sheet_id,
+                worksheet_name=GOLD_ETF_TAB_DEFAULT,
+                credentials_path=CREDENTIALS_PATH,
+                token_path=TOKEN_PATH,
+            )
+            writer.write_table(successful_payloads)
+            print(f"\n✅ Gold ETFs Analytics report successfully written to Google Sheet tab '{GOLD_ETF_TAB_DEFAULT}'!")
+        else:
+            log.warning("No Google Sheet ID configured. Skipping Sheet write.")
+    except Exception as e:
+        log.exception("Failed to write Gold ETFs report to Google Sheet:")
+
     log.info("Gold ETF Analytics completed successfully.")
     return 0
 
