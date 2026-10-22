@@ -102,6 +102,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "Must already be present in data/sheet_columns.json.",
     )
     p.add_argument(
+        "--tab",
+        type=str,
+        default=None,
+        help="Worksheet tab name to backfill into (default: 'Daily NAV' from config/settings.yaml).",
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Compute and print updates without writing to the sheet.",
@@ -231,7 +237,8 @@ def run(args: argparse.Namespace) -> int:
     creds = _load_credentials(CREDENTIALS_PATH, TOKEN_PATH)
     client = gspread.authorize(creds)
     spreadsheet = client.open_by_key(settings.google_sheet.spreadsheet_id)
-    worksheet = spreadsheet.worksheet(settings.google_sheet.worksheet)
+    target_tab = args.tab or settings.google_sheet.worksheet
+    worksheet = spreadsheet.worksheet(target_tab)
     _verify_layout(worksheet, expected_groups=len(columns))
     log.info(
         "Layout verified: %d fund group(s), aligned with state.", len(columns)
