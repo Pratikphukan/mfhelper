@@ -21,3 +21,6 @@ etfs:
   - code: "115127"
     ticker: "BSLGOLD"
     name: "Aditya Birla Sun Life Gold ETF"
+  - code: "152284"
+    ticker: "TATAGOLD"
+    name: "Tata Gold Exchange Traded Fund"
