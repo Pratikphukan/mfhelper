@@ -18,3 +18,5 @@ logs/
 .env
 agent/.env
 config/alerts.yaml
+gcp-credentials.json
+check.py
