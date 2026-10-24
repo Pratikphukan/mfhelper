@@ -719,7 +719,17 @@ class SheetAppender:
         ordered_codes: list[str],
         values_by_code: Mapping[str, NavValue],
     ) -> int:
+        """Append a run row, or overwrite if a row for today already exists.
+
+        If one or more rows for today's date already exist in the sheet, the
+        last such row is updated in place with the fresh values (and its
+        timestamp is refreshed). Any earlier duplicate rows for the same date
+        are deleted first so only one row per date is kept.
+
+        Returns 1 if a row was written (appended or updated).
+        """
         worksheet = self._run_with_retry(self._connect)
+
         row: list[object] = [run_timestamp]
         for code in ordered_codes:
             value = values_by_code.get(code)
@@ -735,9 +745,54 @@ class SheetAppender:
                         "" if value.rsi is None else value.rsi,
                     ]
                 )
-        self._run_with_retry(
-            lambda: worksheet.append_rows([row], value_input_option="USER_ENTERED")
-        )
+
+        today = run_timestamp.split(" ", 1)[0]
+
+        # Find all sheet rows (1-based) that belong to today's date.
+        timestamps = self._run_with_retry(lambda: worksheet.col_values(1))
+        data_timestamps = timestamps[HEADER_ROWS:] if len(timestamps) > HEADER_ROWS else []
+        today_rows: list[int] = [
+            HEADER_ROWS + 1 + i
+            for i, ts in enumerate(data_timestamps)
+            if ts.split(" ", 1)[0] == today
+        ]
+
+        if not today_rows:
+            # No row for today yet — normal append.
+            self._run_with_retry(
+                lambda: worksheet.append_rows([row], value_input_option="USER_ENTERED")
+            )
+            log.info("Appended new row for %s", today)
+        else:
+            # Delete all but the last duplicate row for today (oldest first),
+            # then overwrite the surviving row with fresh values.
+            if len(today_rows) > 1:
+                extra_start = today_rows[0]
+                extra_end = today_rows[-2]  # keep the last one
+                log.info(
+                    "Deleting %d earlier duplicate row(s) for %s (sheet rows %d..%d)",
+                    len(today_rows) - 1,
+                    today,
+                    extra_start,
+                    extra_end,
+                )
+                self._run_with_retry(
+                    lambda s=extra_start, e=extra_end: worksheet.delete_rows(s, e)
+                )
+                # After deletion the surviving row shifted up.
+                target_row = extra_start
+            else:
+                target_row = today_rows[0]
+
+            total_cols = len(row)
+            range_name = f"A{target_row}:{_col_letter(total_cols)}{target_row}"
+            log.info("Overwriting existing row for %s at sheet row %d", today, target_row)
+            self._run_with_retry(
+                lambda r=range_name: worksheet.update(
+                    values=[row], range_name=r, value_input_option="USER_ENTERED"
+                )
+            )
+
         return 1
 
     def trim_to_window(self, history_days: int) -> int:
