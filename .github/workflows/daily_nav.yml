@@ -31,6 +31,7 @@ jobs:
           data/last_nav.json
           data/sheet_columns.json
           data/combined_portfolio_allocation.json
+          data/mfapi_cache/
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
         restore-keys: |
           daily-nav-state-
@@ -82,6 +83,7 @@ jobs:
           data/last_nav.json
           data/sheet_columns.json
           data/combined_portfolio_allocation.json
+          data/mfapi_cache/
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
 
     - name: Copy dashboard to server index
