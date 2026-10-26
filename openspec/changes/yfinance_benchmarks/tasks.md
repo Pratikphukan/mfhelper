@@ -28,7 +28,14 @@
 * [ ] Update `note` fields to reference yfinance/Yahoo Finance instead of
       niftyindices.com.
 
-## Phase 4: Update `.gitignore`
+## Phase 4: GitHub Actions Workflow
+
+* [ ] Add `data/benchmark_history/` to the `path:` block in the
+      `Restore Daily NAV State Cache` step.
+* [ ] Add `data/benchmark_history/` to the `path:` block in the
+      `Save Daily NAV State Cache` step.
+
+## Phase 5: Update `.gitignore`
 
 * [ ] Confirm `data/benchmark_history/` is already in `.gitignore`
       (it should be — verify and add if missing).
