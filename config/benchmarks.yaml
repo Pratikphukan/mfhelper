@@ -4,30 +4,34 @@
 #   code:        AMFI scheme code (string, must match config/funds.yaml).
 #   fund_name:   Free-form display name (not used at runtime; here as
 #                a comment so this file is self-explanatory).
-#   index_name:  Index name as it appears on niftyindices.com's
-#                historical-data dropdown. Case-sensitive. Leave EMPTY
+#   index_name:  Yahoo Finance ticker for the benchmark index. Leave EMPTY
 #                ("") to document an intended benchmark that the current
 #                fetcher (mfhelper/benchmarks.py) cannot serve --
 #                returns_main.py and plot_main.py will silently skip
 #                vs_benchmark for any entry whose index_name is empty.
-#   variant:     "PR" (price-return, what niftyindices.com exposes) or
-#                "TRI" (total-return, gated). All entries below are PR.
+#   variant:     "PR" (price-return, what Yahoo Finance exposes) or
+#                "TRI" (total-return, not publicly available for free).
+#                All entries below are PR.
 #   note:        Free-form annotation, surfaced into the per-fund JSON
 #                under vs_benchmark.data_quality.note. Use this to
 #                explain the PR-vs-TRI gap, benchmark changes over time,
 #                category caveats, etc.
 #
+# Yahoo Finance tickers for supported NIFTY indices:
+#   NIFTY 50         →  ^NSEI
+#   NIFTY 200        →  ^CNX200
+#   NIFTY 500        →  ^CRSLDX
+#   NIFTY MIDCAP 150 →  ^NSEMDCP50
+#
 # Why some funds have empty index_name:
-#   niftyindices.com only carries Nifty equity / strategy / fixed-income
-#   indexes. It does NOT carry:
-#     - Domestic gold price (RBI / MCX / GOLDBEES proxy needed)
+#   Yahoo Finance does not carry:
+#     - Domestic gold price (GOLDBEES.NS proxy could work but needs
+#       currency-adjusted handling)
 #     - CRISIL fixed-income series (CRISIL data is paywalled)
-#     - International indexes (MSCI ACWI, S&P 500, Russell 3000 etc.)
+#     - International indexes in INR (MSCI ACWI, S&P 500 etc. need
+#       USD->INR conversion)
 #   Those funds are listed below with index_name="" and a note pointing
-#   at the correct ticker / data source for when we add yfinance or a
-#   gold-price fetcher in the future. Keeping them in this file (instead
-#   of just commenting them out) means the to-do is visible right
-#   alongside the rest of the configuration.
+#   at the correct ticker / data source for future implementation.
 #
 # Categories are noted in the comments to make within-category vs.
 # cross-category comparison obvious. SEBI's category definitions
@@ -40,18 +44,18 @@ benchmarks:
   # ----------------------------------------------------------------
   - code: "120492"
     fund_name: "JM Flexicap Fund (Direct) - Growth Option"
-    index_name: "NIFTY 500"
+    index_name: "^CRSLDX"
     variant: "PR"
-    note: "JM Flexicap's official benchmark per AMC factsheet is NIFTY 500 TRI. We use PR (price-only) data because niftyindices.com's public endpoint exposes PR cleanly while TRI requires the gated UI. PR understates the benchmark by roughly the index dividend yield (~1.3%/yr for NIFTY 500), so the fund will appear ~1.3%/yr ahead of where the strictly-fair TRI comparison would put it. The shape of the comparison (rolling distribution, beat-rate, consistency) is preserved."
+    note: "JM Flexicap's official benchmark per AMC factsheet is NIFTY 500 TRI. We use PR (price-only) data from Yahoo Finance (ticker ^CRSLDX) because TRI is not available from any free public source. PR understates the benchmark by roughly the index dividend yield (~1.3%/yr for NIFTY 500), so the fund will appear ~1.3%/yr ahead of where the strictly-fair TRI comparison would put it. The shape of the comparison (rolling distribution, beat-rate, consistency) is preserved."
 
   # ----------------------------------------------------------------
   # MID CAP -- benchmark: NIFTY MIDCAP 150
   # ----------------------------------------------------------------
   - code: "127042"
     fund_name: "Motilal Oswal Midcap Fund - Direct - Growth"
-    index_name: "NIFTY MIDCAP 150"
+    index_name: "^NSEMDCP50"
     variant: "PR"
-    note: "Motilal Oswal Midcap's official benchmark is NIFTY Midcap 150 TRI (since 2018 SEBI recategorization; previously NIFTY Midcap 100). We use NIFTY Midcap 150 PR throughout for both pre- and post-2018 history, for consistency. PR understates the benchmark by the index dividend yield (~1.5%/yr for NIFTY Midcap 150), so the fund's apparent outperformance is overstated by that much."
+    note: "Motilal Oswal Midcap's official benchmark is NIFTY Midcap 150 TRI (since 2018 SEBI recategorization; previously NIFTY Midcap 100). We use NIFTY Midcap 150 PR from Yahoo Finance (ticker ^NSEMDCP50) throughout for both pre- and post-2018 history, for consistency. PR understates the benchmark by the index dividend yield (~1.5%/yr for NIFTY Midcap 150), so the fund's apparent outperformance is overstated by that much."
 
   # ----------------------------------------------------------------
   # ELSS (TAX SAVER, EQUITY) -- benchmark: NIFTY 500
@@ -61,15 +65,15 @@ benchmarks:
   # ----------------------------------------------------------------
   - code: "120847"
     fund_name: "quant ELSS Tax Saver Fund - Growth Option - Direct Plan"
-    index_name: "NIFTY 500"
+    index_name: "^CRSLDX"
     variant: "PR"
-    note: "Quant ELSS's official benchmark is NIFTY 500 TRI. Same PR-vs-TRI caveat as the flexi-cap entry: the ~1.3%/yr index dividend yield makes the fund's apparent outperformance ~1.3%/yr higher than the strictly-fair TRI comparison."
+    note: "Quant ELSS's official benchmark is NIFTY 500 TRI. We use PR from Yahoo Finance (ticker ^CRSLDX). Same PR-vs-TRI caveat as the flexi-cap entry: the ~1.3%/yr index dividend yield makes the fund's apparent outperformance ~1.3%/yr higher than the strictly-fair TRI comparison."
 
   - code: "135781"
     fund_name: "Mirae Asset ELSS Tax Saver Fund - Direct Plan - Growth"
-    index_name: "NIFTY 500"
+    index_name: "^CRSLDX"
     variant: "PR"
-    note: "Mirae ELSS Tax Saver's official benchmark is NIFTY 500 TRI. Same PR-vs-TRI caveat: fund will appear ~1.3%/yr ahead of where TRI would put it."
+    note: "Mirae ELSS Tax Saver's official benchmark is NIFTY 500 TRI. We use PR from Yahoo Finance (ticker ^CRSLDX). Same PR-vs-TRI caveat: fund will appear ~1.3%/yr ahead of where TRI would put it."
 
   # ----------------------------------------------------------------
   # LARGE & MID CAP -- benchmark: NIFTY LARGEMIDCAP 250
@@ -80,9 +84,9 @@ benchmarks:
   # ----------------------------------------------------------------
   - code: "119721"
     fund_name: "SBI LARGE & MIDCAP FUND - DIRECT PLAN - Growth"
-    index_name: "NIFTY 200"
+    index_name: "^CNX200"
     variant: "PR"
-    note: "BENCHMARK SUBSTITUTION: the fund's officially-stated benchmark is NIFTY LargeMidcap 250 TRI, but niftyindices.com's historical-data endpoint did not recognize any of the spellings probed for that index ('NIFTY LARGEMIDCAP 250', 'Nifty LargeMidcap 250', 'NIFTY Large Midcap 250', 'Nifty Large Midcap 250' -- two returned 0 rows, two timed out). Until the right spelling is found (or we add a yfinance fallback / NSE archive scraper), we use NIFTY 200 as a near-equivalent substitute. NIFTY 200 = top 200 stocks by full market cap = NIFTY 100 + NIFTY MIDCAP 100. NIFTY LARGEMIDCAP 250 = NIFTY 100 + NIFTY MIDCAP 150. They differ only by the bottom 50 midcap stocks and historically track within ~1%/yr of each other. So the comparison is directionally correct -- it's tilted very slightly more large-cap than the strict benchmark, which would understate the fund's downside vs benchmark in midcap-led drawdowns by roughly the 50-stock difference. PR-vs-TRI gap (~1.3-1.5%/yr) applies as for the other equity benchmarks."
+    note: "BENCHMARK SUBSTITUTION: the fund's officially-stated benchmark is NIFTY LargeMidcap 250 TRI. NIFTY LargeMidcap 250 is not available on Yahoo Finance; we use NIFTY 200 (ticker ^CNX200) as a near-equivalent substitute. NIFTY 200 = top 200 stocks by full market cap = NIFTY 100 + NIFTY MIDCAP 100. NIFTY LARGEMIDCAP 250 = NIFTY 100 + NIFTY MIDCAP 150. They differ only by the bottom 50 midcap stocks and historically track within ~1%/yr of each other. The comparison is directionally correct but slightly more large-cap tilted than the strict benchmark. PR-vs-TRI gap (~1.3-1.5%/yr) applies as for the other equity benchmarks."
 
   # ----------------------------------------------------------------
   # ARBITRAGE -- benchmark: NIFTY 50 Arbitrage / CRISIL Liquid
