@@ -140,34 +140,10 @@ yfinance>=0.2,<1
 
 ## 5. GitHub Actions Workflow Change
 
-Add `data/benchmark_history/` to the Actions cache so a locally-warmed
-cache survives across CI runs:
-
-```yaml
-- name: Restore Daily NAV State Cache
-  uses: actions/cache/restore@v4
-  with:
-    path: |
-      data/last_nav.json
-      data/sheet_columns.json
-      data/combined_portfolio_allocation.json
-      data/mfapi_cache/
-      data/benchmark_history/     # <-- add this
-
-- name: Save Daily NAV State Cache
-  uses: actions/cache/save@v4
-  with:
-    path: |
-      data/last_nav.json
-      data/sheet_columns.json
-      data/combined_portfolio_allocation.json
-      data/mfapi_cache/
-      data/benchmark_history/     # <-- add this
-```
-
-Since yfinance now works from CI, the cache will be populated on the first
-run and reused for subsequent runs within 18 hours (i.e. within the same day
-if triggered multiple times).
+No workflow changes needed. Since yfinance works from CI, the benchmark
+history is fetched fresh on each daily run (the 18h TTL is always exceeded
+between runs). The existing `data/benchmark_history/` cache is only useful
+for repeated local runs within the same day — CI doesn't need to persist it.
 
 ---
 
