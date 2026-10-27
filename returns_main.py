@@ -317,6 +317,7 @@ def run(args: argparse.Namespace) -> int:
                     cached_bench.history,
                     benchmark_name=cached_bench.name,
                     variant=cached_bench.variant,
+                    data_source=cached_bench.data_source,
                     benchmark_note=bench_cfg.get("note"),
                 )
 

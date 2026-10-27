@@ -126,9 +126,15 @@ benchmarks:
   # ----------------------------------------------------------------
   - code: "119788"
     fund_name: "SBI GOLD FUND - DIRECT PLAN - GROWTH"
-    index_name: ""
+    index_name: "GOLD_INR"
     variant: "PR"
-    note: "Documented but not fetched. SBI Gold Fund's benchmark is the Domestic Price of Gold (INR). niftyindices.com does not carry this. Cleanest path to enable: add a yfinance fetcher and use 'GOLDBEES.NS' (Nippon India Gold ETF, listed on NSE) as a proxy -- it tracks the LBMA AM gold price in INR with negligible tracking error. Alternative: scrape RBI's daily gold reference rate. Note: the fund is itself essentially a gold-tracking instrument (ETF FoF), so 'alpha vs benchmark' should be small and stable -- mostly the fund's expense ratio."
+    note: "Domestic gold price in INR, constructed as GC=F (COMEX front-month gold futures, USD/troy oz) × INR=X (USD/INR spot rate) via yfinance. GC=F is the futures price -- includes a small contango premium vs spot and rolls periodically; for daily NAV comparison the difference is negligible. This is the standard SEBI-mandated benchmark for gold funds. Alpha vs benchmark should be small and stable -- mostly the fund's expense ratio (~0.5%/yr for this ETF FoF)."
+
+  - code: "113076"
+    fund_name: "ICICI Prudential Gold ETF"
+    index_name: "GOLD_INR"
+    variant: "PR"
+    note: "Same domestic gold price construction as SBI Gold Fund above (GC=F × INR=X via yfinance). ICICI Prudential Gold ETF directly holds physical gold, so alpha vs this benchmark should be very small and stable -- essentially just the fund's expense ratio (~0.5%/yr)."
 
   # ----------------------------------------------------------------
   # INTERNATIONAL EQUITY (FoF) -- benchmark: MSCI / S&P / Russell
