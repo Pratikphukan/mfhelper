@@ -279,7 +279,7 @@ def evaluate_fund_alerts(scheme_code: str = Field(description="AMFI scheme code"
         alert_settings.rules,
     )
     resolved = resolve_conflicting_alerts(alerts)
-    buying = check_confluence_signal(code, result.scheme_name, rsi_value, dist52, dist200, alert_settings.rules.rules)
+    buying = check_confluence_signal(code, result.scheme_name, rsi_value, dist52, dist200, alert_settings.rules)
     trimming = check_trimming_signal(code, result.scheme_name, rsi_value, dist52, alert_settings.rules.rules)
     return _dump({
         "scheme_code": code,
