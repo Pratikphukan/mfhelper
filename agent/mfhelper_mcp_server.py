@@ -169,8 +169,8 @@ def compare_fund_to_benchmark(
     from mfhelper.benchmarks import fetch_benchmark_history, YFINANCE_START_DATE
     from mfhelper.vs_benchmark import compute_vs_benchmark
 
-    if variant not in {"PR", "TRI"}:
-        raise ValueError("variant must be PR or TRI.")
+    if variant != "PR":
+        raise ValueError("The current Yahoo Finance benchmark source provides price-return (PR) data only; TRI is not available through this tool.")
     code, result = _get_history(scheme_code)
     ticker = benchmark_ticker.strip()
     if not ticker or len(ticker) > 40:
