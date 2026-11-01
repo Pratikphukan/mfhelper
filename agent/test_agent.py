@@ -32,11 +32,11 @@ async def main():
         )
         
         print("--- RUNNING QUERY 1 ---")
-        response1 = await chat.run("What is the content of @report.pdf?")
+        response1 = await chat.run("What funds are currently configured inside @funds.yaml?")
         print("RESPONSE 1:", response1)
         
         print("\n--- RUNNING QUERY 2 ---")
-        response2 = await chat.run("Show me all worksheet tabs inside my Google Sheet")
+        response2 = await chat.run("Analyze the mutual fund with scheme code 120492.")
         print("RESPONSE 2:", response2)
 
 if __name__ == "__main__":

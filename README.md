@@ -37,6 +37,18 @@ To prevent local development testing from polluting your production databases or
 * Running locally with `.venv/bin/python main.py --dev` automatically redirects all writes to a separate **`Daily NAV (Dev)`** worksheet tab and prefixes email subjects with **`[DEV]`**. 
 * Running in production on GitHub Actions automatically writes to your primary **`Daily NAV`** sheet and sends standard production briefs.
 
+### 6. 🤖 Conversational AI Copilot & MCP Server (`agent/`)
+Transforms MFHelper into an interactive financial intelligence assistant accessible via the Model Context Protocol (MCP):
+* **Compatible AI Clients:** Works out of the box with **Claude Desktop**, **Cursor**, **OpenCode**, and standalone terminal CLI chat.
+* **Native MCP Tools:**
+  * `get_fund_metrics(scheme_code)`: Real-time NAV, 52W high distance %, 200D SMA %, 14D Wilder RSI, and trailing CAGR.
+  * `get_fund_overlap(code_a, code_b)`: Pairwise portfolio overlap % and top common stock holdings via Tickertape.
+  * `get_category_rankings(category)`: Ranked leaderboard sorted by 3Y Sharpe ratio, volatility, and trailing CAGR.
+  * `screen_dip_opportunities()`: Scans tracked funds for Tier 1/2/3 Confluence Dip-Buying signals and Trimming warnings.
+  * `read_google_sheet(tab_name)`: Live inspection of Google Sheet tabs.
+* **Context `@` Mentions:** Reference live config files directly in chat (e.g. `@funds.yaml`, `@alerts.yaml`, `@settings.yaml`).
+* See [agent/README.md](agent/README.md) for quick setup guides for Claude Desktop, Cursor, and OpenCode.
+
 ---
 
 ## Sheet layout
