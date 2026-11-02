@@ -48,9 +48,9 @@ class Settings:
 def load_funds(path: Path) -> list[FundConfig]:
     with path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
-    entries = raw.get("funds") or []
+    entries = raw.get("funds") or raw.get("etfs") or []
     if not isinstance(entries, list) or not entries:
-        raise ValueError(f"No funds configured in {path}. Add entries under the 'funds:' key.")
+        raise ValueError(f"No funds configured in {path}. Add entries under 'funds:' or 'etfs:'.")
 
     funds: list[FundConfig] = []
     seen_codes: set[str] = set()

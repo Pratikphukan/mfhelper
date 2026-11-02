@@ -59,7 +59,20 @@ def fetch_fund_metrics_summary(scheme_code: str) -> dict[str, Any]:
     dist_52w = distance_from_52w_high(history, current_nav, current_date)
     dist_200d = distance_from_200d_sma(history, current_nav, current_date)
     rsi_val = compute_rsi(history, current_nav, current_date)
-    trailing = trailing_returns(history, current_date)
+    raw_trailing = trailing_returns(history, current_date)
+
+    # Normalize trailing returns dictionary so both period labels ('1M', '1Y', '3Y')
+    # and engine keys ('1m_pct', '1y_absolute_pct', '3y_cagr_pct') are accessible.
+    trailing = dict(raw_trailing)
+    trailing.update({
+        "1M": raw_trailing.get("1m_pct"),
+        "3M": raw_trailing.get("3m_pct"),
+        "6M": raw_trailing.get("6m_pct"),
+        "1Y": raw_trailing.get("1y_absolute_pct"),
+        "3Y": raw_trailing.get("3y_cagr_pct"),
+        "5Y": raw_trailing.get("5y_cagr_pct"),
+        "Inception": raw_trailing.get("since_inception_cagr_pct"),
+    })
 
     return {
         "status": "success",
@@ -116,17 +129,21 @@ def format_metrics_markdown(data: dict[str, Any]) -> str:
     ]
 
     period_labels = [
-        ("1M", "1 Month (Absolute)"),
-        ("3M", "3 Month (Absolute)"),
-        ("6M", "6 Month (Absolute)"),
-        ("1Y", "1 Year (Absolute)"),
-        ("3Y", "3 Year (CAGR)"),
-        ("5Y", "5 Year (CAGR)"),
-        ("Inception", "Since Inception (CAGR)"),
+        (["1M", "1m_pct"], "1 Month (Absolute)"),
+        (["3M", "3m_pct"], "3 Month (Absolute)"),
+        (["6M", "6m_pct"], "6 Month (Absolute)"),
+        (["1Y", "1y_absolute_pct"], "1 Year (Absolute)"),
+        (["3Y", "3y_cagr_pct"], "3 Year (CAGR)"),
+        (["5Y", "5y_cagr_pct"], "5 Year (CAGR)"),
+        (["Inception", "since_inception_cagr_pct"], "Since Inception (CAGR)"),
     ]
 
-    for key, label in period_labels:
-        val = trailing.get(key)
+    for keys, label in period_labels:
+        val = None
+        for k in keys:
+            if trailing.get(k) is not None:
+                val = trailing.get(k)
+                break
         if val is not None:
             sign = "+" if val > 0 else ""
             lines.append(f"| {label} | **{sign}{val:.2f}%** |")
@@ -226,13 +243,35 @@ def fetch_fund_overlap_summary(code_a: str, code_b: str) -> dict[str, Any]:
 
     overlap_pct, common_stocks = calculate_overlap_percentage(holdings_a, holdings_b)
 
+    # Normalize holdings dictionaries so that both engine fields ('company_name', 'alloc_a',
+    # 'alloc_b', 'intersection') and formatter fields ('name', 'weight_a', 'weight_b', 'min_weight')
+    # are present.
+    normalized_common = []
+    for s in common_stocks:
+        comp_name = s.get("company_name") or s.get("name", "Unknown")
+        alloc_a = s.get("alloc_a") if s.get("alloc_a") is not None else s.get("weight_a", 0.0)
+        alloc_b = s.get("alloc_b") if s.get("alloc_b") is not None else s.get("weight_b", 0.0)
+        intersection = s.get("intersection") if s.get("intersection") is not None else s.get("min_weight", 0.0)
+        ticker = s.get("ticker", "")
+        normalized_common.append({
+            "company_name": comp_name,
+            "name": comp_name,
+            "ticker": ticker,
+            "alloc_a": alloc_a,
+            "weight_a": alloc_a,
+            "alloc_b": alloc_b,
+            "weight_b": alloc_b,
+            "intersection": intersection,
+            "min_weight": intersection,
+        })
+
     return {
         "status": "success",
         "fund_a": {"code": clean_a, "name": name_a, "total_holdings": len(holdings_a)},
         "fund_b": {"code": clean_b, "name": name_b, "total_holdings": len(holdings_b)},
         "overlap_pct": overlap_pct,
-        "common_count": len(common_stocks),
-        "common_stocks": common_stocks,
+        "common_count": len(normalized_common),
+        "common_stocks": normalized_common,
     }
 
 
@@ -269,14 +308,17 @@ def format_overlap_markdown(data: dict[str, Any]) -> str:
 
     top_stocks = common[:15]
     for s in top_stocks:
-        name = s.get("name", "Unknown")
-        min_wt = s.get("min_weight", 0.0)
-        wt_a = s.get("weight_a", 0.0)
-        wt_b = s.get("weight_b", 0.0)
+        name = s.get("name") or s.get("company_name", "Unknown")
+        min_wt = s.get("min_weight") if s.get("min_weight") is not None else s.get("intersection", 0.0)
+        wt_a = s.get("weight_a") if s.get("weight_a") is not None else s.get("alloc_a", 0.0)
+        wt_b = s.get("weight_b") if s.get("weight_b") is not None else s.get("alloc_b", 0.0)
         lines.append(f"| {name} | **{min_wt:.2f}%** | {wt_a:.2f}% | {wt_b:.2f}% |")
 
     if len(common) > 15:
-        remaining_sum = sum(s.get("min_weight", 0.0) for s in common[15:])
+        remaining_sum = sum(
+            (s.get("min_weight") if s.get("min_weight") is not None else s.get("intersection", 0.0))
+            for s in common[15:]
+        )
         lines.append(f"| *... and {len(common) - 15} more smaller common holdings* | *{remaining_sum:.2f}%* | - | - |")
 
     return "\n".join(lines)
@@ -332,9 +374,9 @@ def fetch_category_rankings(category: str) -> dict[str, Any]:
             "name": f.name or res.scheme_name,
             "nav": latest.nav,
             "nav_date": latest.nav_date.isoformat(),
-            "cagr_1y": trailing.get("1Y"),
-            "cagr_3y": trailing.get("3Y"),
-            "cagr_5y": trailing.get("5Y"),
+            "cagr_1y": trailing.get("1y_absolute_pct") if trailing.get("1y_absolute_pct") is not None else trailing.get("1Y"),
+            "cagr_3y": trailing.get("3y_cagr_pct") if trailing.get("3y_cagr_pct") is not None else trailing.get("3Y"),
+            "cagr_5y": trailing.get("5y_cagr_pct") if trailing.get("5y_cagr_pct") is not None else trailing.get("5Y"),
             "sd_3y": risk.get("sd_3y_annualized_pct"),
             "sharpe_3y": adjusted.get("sharpe_3y"),
             "sortino_3y": adjusted.get("sortino_3y"),
@@ -428,21 +470,30 @@ def screen_dip_and_trim_opportunities(
     dip_signals = []
     trim_signals = []
     scanned_count = 0
-    active_count = 0
+    active_evaluated_count = 0
+    failed_funds = []
+    skipped_funds = []
 
     for f in funds:
         scanned_count += 1
         if not f.active:
+            skipped_funds.append({"code": f.code, "name": f.name, "reason": "Inactive"})
             continue
         # Skip debt funds for equity confluence signals
         if (f.category or "").strip().lower() in ("debt", "liquid", "arbitrage"):
+            skipped_funds.append({"code": f.code, "name": f.name, "reason": f"Non-equity category: {f.category}"})
             continue
 
-        active_count += 1
         res = fetch_history(f.code)
         if not res or not res.history:
+            failed_funds.append({
+                "code": f.code,
+                "name": f.name or f"Scheme {f.code}",
+                "reason": "NAV history could not be retrieved from mfapi.in",
+            })
             continue
 
+        active_evaluated_count += 1
         history = res.history
         latest = history[0]
         current_nav = latest.nav
@@ -491,10 +542,24 @@ def screen_dip_and_trim_opportunities(
     dip_signals.sort(key=lambda s: s["tier"], reverse=True)
     trim_signals.sort(key=lambda s: s["tier"], reverse=True)
 
+    if active_evaluated_count == 0:
+        return {
+            "status": "error",
+            "message": f"Could not retrieve NAV history for any active fund ({len(failed_funds)} failed).",
+            "scanned_count": scanned_count,
+            "active_evaluated_count": 0,
+            "failed_funds": failed_funds,
+            "skipped_funds": skipped_funds,
+            "dip_signals": [],
+            "trim_signals": [],
+        }
+
     return {
         "status": "success",
         "scanned_count": scanned_count,
-        "active_evaluated_count": active_count,
+        "active_evaluated_count": active_evaluated_count,
+        "failed_funds": failed_funds,
+        "skipped_funds": skipped_funds,
         "dip_signals": dip_signals,
         "trim_signals": trim_signals,
     }
@@ -503,7 +568,33 @@ def screen_dip_and_trim_opportunities(
 def format_screen_markdown(data: dict[str, Any]) -> str:
     """Format dip and trim opportunity scanner results into clean markdown."""
     if data.get("status") != "success":
-        return f"❌ {data.get('message', 'Failed to scan opportunities.')}"
+        failed = data.get("failed_funds", [])
+        failed_str = ""
+        if failed:
+            failed_list = ", ".join([f"{f.get('name') or f.get('code')} (`{f.get('code')}`)" for f in failed])
+            failed_str = f"\n\nFailed funds: {failed_list}"
+        return f"❌ {data.get('message', 'Failed to scan opportunities.')}{failed_str}"
+
+    dips = data.get("dip_signals", [])
+    trims = data.get("trim_signals", [])
+    active_count = data.get("active_evaluated_count", 0)
+    failed_funds = data.get("failed_funds", [])
+
+    lines = [
+        f"### 🎯 Tactical Market Confluence Scanner",
+        f"Evaluated **{active_count} active funds** against multi-indicator confluence thresholds.",
+        "",
+    ]
+
+    if failed_funds:
+        failed_names = ", ".join([f"{f.get('name') or f.get('code')} (`{f.get('code')}`)" for f in failed_funds])
+        lines.append(f"> ⚠️ **Warning:** Could not retrieve data for {len(failed_funds)} fund(s): {failed_names}. These were skipped.")
+        lines.append("")
+
+    if not dips and not trims:
+        lines.append("✅ **No extreme dip or trim confluences detected today.**")
+        lines.append("All tracked funds are trading in normal equilibrium ranges. Standard SIP schedules should continue uninterrupted.")
+        return "\n".join(lines)
 
     dips = data.get("dip_signals", [])
     trims = data.get("trim_signals", [])

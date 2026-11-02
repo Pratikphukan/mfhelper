@@ -1,3 +1,4 @@
+import json
 import sys
 import asyncio
 from typing import Optional, Any
@@ -51,16 +52,30 @@ class MCPClient:
         return await self.session().call_tool(tool_name, tool_input)
 
     async def list_prompts(self) -> list[types.Prompt]:
-        # TODO: Return a list of prompts defined by the MCP server
-        return []
+        result = await self.session().list_prompts()
+        return result.prompts
 
-    async def get_prompt(self, prompt_name, args: dict[str, str]):
-        # TODO: Get a particular prompt defined by the MCP server
-        return []
+    async def get_prompt(self, prompt_name: str, args: Optional[dict[str, str]] = None):
+        result = await self.session().get_prompt(prompt_name, arguments=args)
+        return result.messages
 
     async def read_resource(self, uri: str) -> Any:
-        # TODO: Read a resource, parse the contents and return it
-        return []
+        result = await self.session().read_resource(uri)
+        if not hasattr(result, "contents") or not result.contents:
+            return [] if uri.rstrip("/").endswith("documents") else ""
+
+        first = result.contents[0]
+        text_content = getattr(first, "text", "") or ""
+
+        if uri.rstrip("/").endswith("documents"):
+            try:
+                parsed = json.loads(text_content)
+                if isinstance(parsed, list):
+                    return parsed
+            except Exception:
+                pass
+
+        return text_content
 
     async def cleanup(self):
         await self._exit_stack.aclose()

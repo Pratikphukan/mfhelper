@@ -25,11 +25,12 @@ Compatible with:
 
 ## 📄 Context Documents (`@` Mentions)
 
-You can reference project configuration files directly in your queries using `@`:
+You can reference project configuration files directly in your queries using `@` (supported across Cursor, Claude Desktop, and the interactive terminal CLI):
 - `@funds.yaml` - List of tracked mutual funds and categories
-- `@alerts.yaml` - Technical indicator alert thresholds
+- `@alerts.yaml` - Technical indicator alert thresholds (credentials like `sender_password` are automatically redacted)
 - `@benchmarks.yaml` - Category benchmark assignments
 - `@settings.yaml` - Google Sheet and environment settings
+- `@gold_etfs.yaml` - Indian Gold ETF configuration schema
 
 ---
 

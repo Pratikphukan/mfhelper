@@ -12,6 +12,8 @@ from pathlib import Path
 import sys
 from typing import Any
 
+import yaml
+
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:
@@ -48,6 +50,38 @@ def _format_response(data: dict[str, Any], markdown_text: str, format_type: Any)
     return markdown_text
 
 
+def _format_error(message: str, format_type: Any) -> str:
+    """Format an error message as structured JSON or plain string based on format_type."""
+    fmt = getattr(format_type, "default", format_type)
+    if isinstance(fmt, str) and fmt.strip().lower() == "json":
+        return json.dumps({"error": message}, indent=2)
+    return message
+
+
+def _redact_sensitive_data(val: Any) -> Any:
+    """Recursively redact sensitive credential keys such as passwords, secrets, or tokens."""
+    sensitive_markers = ("password", "secret", "token", "credential", "auth_key", "api_key")
+    if isinstance(val, dict):
+        new_dict = {}
+        for k, v in val.items():
+            k_lower = str(k).lower()
+            if any(marker in k_lower for marker in sensitive_markers):
+                new_dict[k] = "[REDACTED]" if v else v
+            else:
+                new_dict[k] = _redact_sensitive_data(v)
+        return new_dict
+    elif isinstance(val, list):
+        return [_redact_sensitive_data(item) for item in val]
+    return val
+
+
+def _get_allowed_documents() -> list[str]:
+    """Returns sorted list of allowed YAML configuration documents in CONFIG_DIR."""
+    if not CONFIG_DIR.exists():
+        return []
+    return sorted([p.name for p in CONFIG_DIR.glob("*.yaml") if p.is_file()])
+
+
 # ---------------------------------------------------------------------------
 # Resources: Project Configuration Documents (Available for @ mentions)
 # ---------------------------------------------------------------------------
@@ -55,22 +89,40 @@ def _format_response(data: dict[str, Any], markdown_text: str, format_type: Any)
 @mcp.resource("docs://documents")
 def list_documents() -> str:
     """Returns a list of all available project configuration documents."""
-    valid_files = []
-    if CONFIG_DIR.exists():
-        for p in sorted(CONFIG_DIR.glob("*.yaml")):
-            valid_files.append(p.name)
-        if (CONFIG_DIR / "settings.yaml").exists():
-            valid_files.append("settings.yaml")
-    return json.dumps(sorted(list(set(valid_files))))
+    return json.dumps(_get_allowed_documents())
 
 
 @mcp.resource("docs://documents/{doc_id}")
 def get_document_content(doc_id: str) -> str:
-    """Returns the content of a specific configuration file (e.g. 'funds.yaml')."""
-    target = CONFIG_DIR / Path(doc_id).name
-    if not target.exists() or not target.is_file():
+    """Returns the redacted content of an authorized configuration file (e.g. 'funds.yaml')."""
+    allowed_docs = _get_allowed_documents()
+    filename = Path(doc_id).name
+
+    if filename not in allowed_docs or not doc_id.endswith(".yaml"):
+        raise ValueError(
+            f"Access denied: '{doc_id}' is not an authorized configuration document. "
+            f"Allowed documents: {', '.join(allowed_docs)}"
+        )
+
+    target = (CONFIG_DIR / filename).resolve()
+    try:
+        target.relative_to(CONFIG_DIR.resolve())
+    except ValueError:
+        raise ValueError(f"Access denied: Path traversal detected in '{doc_id}'.")
+
+    if not target.is_file():
         raise ValueError(f"Document '{doc_id}' not found in {CONFIG_DIR}")
-    return target.read_text(encoding="utf-8")
+
+    raw_text = target.read_text(encoding="utf-8")
+    try:
+        parsed = yaml.safe_load(raw_text)
+        if isinstance(parsed, (dict, list)):
+            redacted = _redact_sensitive_data(parsed)
+            return yaml.dump(redacted, sort_keys=False)
+    except Exception:
+        pass
+
+    return raw_text
 
 
 # ---------------------------------------------------------------------------
@@ -184,14 +236,17 @@ def read_google_sheet(
     try:
         settings = load_settings(settings_path)
     except Exception as e:
-        return f"Error loading settings.yaml: {e}"
+        return _format_error(f"Error loading settings.yaml: {e}", format)
 
     try:
         creds = _load_credentials(creds_path, token_path)
         client = gspread.authorize(creds)
         spreadsheet = client.open_by_key(settings.google_sheet.spreadsheet_id)
     except Exception as e:
-        return f"Error connecting to Google Sheets API: {e}. Ensure credentials.json and token.json exist."
+        return _format_error(
+            f"Error connecting to Google Sheets API: {e}. Ensure credentials.json and token.json exist.",
+            format,
+        )
 
     if not tab_name.strip():
         try:
@@ -201,15 +256,15 @@ def read_google_sheet(
                 return json.dumps({"worksheets": names}, indent=2)
             return "Available worksheet tabs in your Google Sheet:\n" + "\n".join([f"- {name}" for name in names])
         except Exception as e:
-            return f"Error listing worksheet tabs: {e}"
+            return _format_error(f"Error listing worksheet tabs: {e}", format)
 
     try:
         ws = spreadsheet.worksheet(tab_name.strip())
         all_values = ws.get_all_values()
     except gspread.exceptions.WorksheetNotFound:
-        return f"Error: Worksheet tab '{tab_name}' not found. Please verify the name is correct."
+        return _format_error(f"Error: Worksheet tab '{tab_name}' not found. Please verify the name is correct.", format)
     except Exception as e:
-        return f"Error reading sheet contents: {e}"
+        return _format_error(f"Error reading sheet contents: {e}", format)
 
     if not all_values:
         if format.strip().lower() == "json":

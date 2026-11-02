@@ -127,6 +127,16 @@ def test_fetch_fund_overlap_summary_success():
     assert pytest.approx(res["overlap_pct"], 0.1) == 13.0
     assert res["common_count"] == 2
 
+    # Verify Markdown formatting with actual summary output directly from fetch_fund_overlap_summary
+    md = format_overlap_markdown(res)
+    assert "### 🗺️ Portfolio Overlap Analysis" in md
+    assert "13.00%" in md
+    assert "HDFC Bank" in md
+    assert "Reliance Industries" in md
+    assert "Unknown" not in md
+    assert "**6.00%**" in md
+    assert "**7.00%**" in md
+
 
 def test_format_overlap_markdown():
     data = {
@@ -136,7 +146,7 @@ def test_format_overlap_markdown():
         "overlap_pct": 35.5,
         "common_count": 12,
         "common_stocks": [
-            {"name": "HDFC Bank", "min_weight": 6.5, "weight_a": 8.0, "weight_b": 6.5},
+            {"company_name": "HDFC Bank", "intersection": 6.5, "alloc_a": 8.0, "alloc_b": 6.5},
         ],
     }
     md = format_overlap_markdown(data)
@@ -144,6 +154,7 @@ def test_format_overlap_markdown():
     assert "35.50%" in md
     assert "Moderate Overlap" in md
     assert "HDFC Bank" in md
+    assert "Unknown" not in md
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +187,29 @@ def test_fetch_category_rankings_success(tmp_path):
     assert res["category"] == "flexicap"
     assert res["count"] == 2
     assert len(res["rankings"]) == 2
+    # Verify trailing return fields are properly populated from trailing_returns engine keys
+    assert res["rankings"][0]["cagr_1y"] is not None
+
+
+def test_fetch_category_rankings_gold_etfs(tmp_path):
+    # Tests loading category file using etfs: schema (like config/gold_etfs.yaml)
+    cat_yaml = tmp_path / "gold_etfs.yaml"
+    cat_yaml.write_text("etfs:\n  - code: '140088'\n    ticker: 'GOLDBEES'\n    name: 'Nippon Gold ETF'\n")
+
+    history = _make_dummy_history(400, 50.0)
+    mock_res = MfapiResult(scheme_name="Nippon Gold ETF", history=history)
+
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path), \
+         patch("mfhelper.agent_tools.fetch_history", return_value=mock_res):
+
+        res = fetch_category_rankings("gold_etfs")
+
+    assert res["status"] == "success"
+    assert res["category"] == "gold_etfs"
+    assert res["count"] == 1
+    assert res["rankings"][0]["code"] == "140088"
+    assert res["rankings"][0]["name"] == "Nippon Gold ETF"
+    assert res["rankings"][0]["cagr_1y"] is not None
 
 
 def test_format_rankings_markdown():
@@ -260,6 +294,48 @@ def test_screen_dip_and_trim_opportunities_with_signals(tmp_path):
     assert "Tier-3 Generational Dip" in md
     assert "Fund One" in md
     assert "Direct Buy on Groww" in md
+
+
+def test_screen_dip_and_trim_opportunities_all_failed(tmp_path):
+    funds_yaml = tmp_path / "funds.yaml"
+    funds_yaml.write_text("funds:\n  - code: '1001'\n    name: 'Fund One'\n    active: true\n")
+
+    # When network/API fails for all funds
+    with patch("mfhelper.agent_tools.fetch_history", return_value=None):
+        res = screen_dip_and_trim_opportunities(funds_path=funds_yaml)
+
+    assert res["status"] == "error"
+    assert res["active_evaluated_count"] == 0
+    assert len(res["failed_funds"]) == 1
+    assert res["failed_funds"][0]["code"] == "1001"
+
+    md = format_screen_markdown(res)
+    assert "❌ Could not retrieve NAV history" in md
+    assert "Failed funds: Fund One (`1001`)" in md
+
+
+def test_screen_dip_and_trim_opportunities_partial_failed(tmp_path):
+    funds_yaml = tmp_path / "funds.yaml"
+    funds_yaml.write_text("funds:\n  - code: '1001'\n    name: 'Fund One'\n    active: true\n  - code: '1002'\n    name: 'Fund Two'\n    active: true\n")
+
+    history = _make_dummy_history(250, 100.0)
+    mock_res = MfapiResult(scheme_name="Fund One", history=history)
+
+    # Fund 1 succeeds, Fund 2 fails
+    with patch("mfhelper.agent_tools.fetch_history", side_effect=[mock_res, None]), \
+         patch("mfhelper.alerts.check_confluence_signal", return_value=None), \
+         patch("mfhelper.alerts.check_trimming_signal", return_value=None):
+
+        res = screen_dip_and_trim_opportunities(funds_path=funds_yaml)
+
+    assert res["status"] == "success"
+    assert res["active_evaluated_count"] == 1
+    assert len(res["failed_funds"]) == 1
+    assert res["failed_funds"][0]["code"] == "1002"
+
+    md = format_screen_markdown(res)
+    assert "Evaluated **1 active funds**" in md
+    assert "Could not retrieve data for 1 fund(s): Fund Two" in md
 
 
 # ---------------------------------------------------------------------------
@@ -363,4 +439,84 @@ def test_screen_dip_opportunities_mcp_json(tmp_path):
         data = json.loads(json_out)
         assert data["status"] == "success"
         assert data["scanned_count"] == 1
+
+
+def test_mcp_server_document_redaction(tmp_path):
+    from agent.mcp_server import get_document_content
+
+    alerts_yaml = tmp_path / "alerts.yaml"
+    alerts_yaml.write_text(
+        "rules:\n  rsi_lower_threshold: 30.0\n"
+        "email:\n  enable: true\n  sender_email: test@example.com\n  sender_password: secret_password_123\n"
+    )
+
+    with patch("agent.mcp_server.CONFIG_DIR", tmp_path):
+        content = get_document_content("alerts.yaml")
+
+    assert "secret_password_123" not in content
+    assert "[REDACTED]" in content
+    assert "test@example.com" in content
+
+
+def test_mcp_server_document_security_restrictions(tmp_path):
+    import pytest
+    from agent.mcp_server import get_document_content
+
+    # Disallowed non-yaml file
+    creds_json = tmp_path / "credentials.json"
+    creds_json.write_text('{"token": "super_secret"}')
+
+    with patch("agent.mcp_server.CONFIG_DIR", tmp_path):
+        with pytest.raises(ValueError, match="Access denied"):
+            get_document_content("credentials.json")
+
+        with pytest.raises(ValueError, match="Access denied"):
+            get_document_content("../secret.yaml")
+
+
+def test_read_google_sheet_json_errors(tmp_path):
+    import json
+    from agent.mcp_server import read_google_sheet
+
+    # When settings.yaml is missing
+    with patch("agent.mcp_server.PROJECT_ROOT", tmp_path):
+        out = read_google_sheet("Sheet1", format="json")
+        parsed = json.loads(out)
+        assert "error" in parsed
+        assert "Error loading settings.yaml" in parsed["error"]
+
+
+def test_mcp_client_read_resource():
+    import asyncio
+    from agent.mcp_client import MCPClient
+    from unittest.mock import AsyncMock, MagicMock
+
+    async def _run():
+        client = MCPClient(command="dummy", args=[])
+        mock_session = MagicMock()
+
+        # Test list of documents
+        doc_result = MagicMock()
+        doc_content = MagicMock()
+        doc_content.text = '["funds.yaml", "alerts.yaml"]'
+        doc_result.contents = [doc_content]
+        mock_session.read_resource = AsyncMock(return_value=doc_result)
+        client._session = mock_session
+
+        docs = await client.read_resource("docs://documents")
+        assert isinstance(docs, list)
+        assert "funds.yaml" in docs
+
+        # Test single document content
+        content_result = MagicMock()
+        file_content = MagicMock()
+        file_content.text = "funds:\n  - code: '120492'\n"
+        content_result.contents = [file_content]
+        mock_session.read_resource = AsyncMock(return_value=content_result)
+
+        text = await client.read_resource("docs://documents/funds.yaml")
+        assert isinstance(text, str)
+        assert "120492" in text
+
+    asyncio.run(_run())
 
