@@ -1,0 +1,19 @@
+---
+description: Mandatory design clarification and user sign-off gate before writing code
+alwaysApply: true
+---
+
+# Mandatory Design Review & Sign-Off Gate
+
+## 1. Zero Assumptions
+- Never assume architectural choices, formulas, or schemas silently.
+- If multiple valid designs exist, present the trade-offs and ask the user to choose.
+
+## 2. Hard Stop After Specification
+- For any new feature or track, create the OpenSpec specification files first (`proposal.md`, `design.md`, `tasks.md`).
+- **STOP IMMEDIATELY**: Present the design questions and assumptions to the user.
+- **DO NOT WRITE CODE OR TESTS** until the user reviews and explicitly confirms or approves the design.
+
+## 3. Sandboxing & Safe Testing
+- Always test against sandbox sheets using the `--dev` flag.
+- Never write to production Google Sheets or send live emails during development runs.

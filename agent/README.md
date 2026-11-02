@@ -1,111 +1,108 @@
-# MCP Chat
+# MFHelper Financial Assistant & MCP Server
 
-MCP Chat is a command-line interface application that enables interactive chat capabilities with AI models through the Anthropic API. The application supports document retrieval, command-based prompts, and extensible tool integrations via the MCP (Model Control Protocol) architecture.
+An intelligent, conversational financial assistant and Model Context Protocol (MCP) server for mutual fund intelligence. It exposes real-time technical indicators, portfolio overlap calculations, category leaderboards, tactical dip-buying confluence scanners, and live Google Sheets access directly to AI clients.
 
-## Prerequisites
+Compatible with:
+- **Claude Desktop**
+- **Cursor**
+- **OpenCode**
+- **Interactive Terminal CLI**
 
-- Python 3.9+
-- Anthropic API Key
+---
 
-## Setup
+## 🛠️ Available MCP Tools
 
-### Step 1: Configure the environment variables
+| Tool | Parameters | Description |
+| :--- | :--- | :--- |
+| `get_fund_metrics` | `scheme_code` (e.g. `'120492'`), `format` (`"markdown"` \| `"json"`, default: `"markdown"`) | Real-time NAV, 52W High distance %, 200D SMA distance %, 14D Wilder RSI, and trailing CAGR (1M, 6M, 1Y, 3Y, 5Y). |
+| `get_fund_overlap` | `code_a`, `code_b`, `format` (`"markdown"` \| `"json"`) | Pairwise portfolio overlap % and top common stock holdings between two funds using Tickertape. |
+| `get_category_rankings` | `category` (e.g. `'flexicap'`, `'midcap'`), `format` (`"markdown"` \| `"json"`) | Ranked leaderboard sorted by 3Y Sharpe ratio, volatility (SD), and trailing CAGR. |
+| `screen_dip_opportunities` | `format` (`"markdown"` \| `"json"`) | Scans tracked portfolio funds for Tier 1/2/3 Confluence Dip-Buying signals and Trimming warnings. |
+| `read_google_sheet` | `tab_name` (optional), `format` (`"markdown"` \| `"json"`) | Reads any Google Sheet tab (or lists all available worksheets if omitted). |
+| `analyze_mutual_fund` | `scheme_code`, `format` (`"markdown"` \| `"json"`) | Backward-compatible alias for `get_fund_metrics`. |
 
-1. Create or edit the `.env` file in the project root and verify that the following variables are set correctly:
+---
 
+## 📄 Context Documents (`@` Mentions)
+
+You can reference project configuration files directly in your queries using `@` (supported across Cursor, Claude Desktop, and the interactive terminal CLI):
+- `@funds.yaml` - List of tracked mutual funds and categories
+- `@alerts.yaml` - Technical indicator alert thresholds (credentials like `sender_password` are automatically redacted)
+- `@benchmarks.yaml` - Category benchmark assignments
+- `@settings.yaml` - Google Sheet and environment settings
+- `@gold_etfs.yaml` - Indian Gold ETF configuration schema
+
+---
+
+## 🚀 Usage Options
+
+### 1. Connecting to Claude Desktop
+
+Add the server to your `claude_desktop_config.json`:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "mfhelper": {
+      "command": "/Users/pratikphookan/PyCharmMiscProject/MFHelper/.venv/bin/python",
+      "args": [
+        "/Users/pratikphookan/PyCharmMiscProject/MFHelper/agent/mcp_server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/pratikphookan/PyCharmMiscProject/MFHelper"
+      }
+    }
+  }
+}
 ```
-ANTHROPIC_API_KEY=""  # Enter your Anthropic API secret key
+
+### 2. Connecting to Cursor
+
+Add to `.cursor/mcp.json` in this repository or globally in `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "mfhelper": {
+      "command": ".venv/bin/python",
+      "args": ["agent/mcp_server.py"]
+    }
+  }
+}
 ```
 
-### Step 2: Install dependencies
+### 3. Connecting to OpenCode
 
-#### Option 1: Setup with uv (Recommended)
+Add to your `.opencode/opencode.jsonc`:
 
-[uv](https://github.com/astral-sh/uv) is a fast Python package installer and resolver.
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "mfhelper": {
+        "command": ".venv/bin/python",
+        "args": ["agent/mcp_server.py"]
+      }
+    }
+  }
+}
+```
 
-1. Install uv, if not already installed:
+Or run via CLI:
+```bash
+opencode mcp add mfhelper --command ".venv/bin/python agent/mcp_server.py"
+```
+
+### 4. Running the Interactive Terminal CLI
+
+Run the standalone CLI chat loop:
 
 ```bash
-pip install uv
+cd /Users/pratikphookan/PyCharmMiscProject/MFHelper
+.venv/bin/python agent/main.py
 ```
 
-2. Create and activate a virtual environment:
-
-```bash
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
-
-3. Install dependencies:
-
-```bash
-uv pip install -e .
-```
-
-4. Run the project
-
-```bash
-uv run main.py
-```
-
-#### Option 2: Setup without uv
-
-1. Create and activate a virtual environment:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
-
-2. Install dependencies:
-
-```bash
-pip install anthropic python-dotenv prompt-toolkit "mcp[cli]==1.8.0"
-```
-
-3. Run the project
-
-```bash
-python main.py
-```
-
-## Usage
-
-### Basic Interaction
-
-Simply type your message and press Enter to chat with the model.
-
-### Document Retrieval
-
-Use the @ symbol followed by a document ID to include document content in your query:
-
-```
-> Tell me about @deposition.md
-```
-
-### Commands
-
-Use the / prefix to execute commands defined in the MCP server:
-
-```
-> /summarize deposition.md
-```
-
-Commands will auto-complete when you press Tab.
-
-## Development
-
-### Adding New Documents
-
-Edit the `mcp_server.py` file to add new documents to the `docs` dictionary.
-
-### Implementing MCP Features
-
-To fully implement the MCP features:
-
-1. Complete the TODOs in `mcp_server.py`
-2. Implement the missing functionality in `mcp_client.py`
-
-### Linting and Typing Check
-
-There are no lint or type checks implemented.
+*Prerequisites for CLI mode:* Set `ANTHROPIC_API_KEY` (or `GEMINI_API_KEY`) and `CLAUDE_MODEL` in `.env` or `agent/.env`.
