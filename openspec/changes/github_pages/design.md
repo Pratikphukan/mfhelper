@@ -60,9 +60,16 @@ permissions:
 Within the workflow, we use the official GitHub-supported Pages deployment actions:
 
 ```yaml
-    # Prepare the website artifact
-    - name: Copy dashboard to server index
-      run: cp dashboard.html index.html
+    # Prepare the website artifact in an isolated directory
+    - name: Clean Up Sensitive Config Files
+      if: always()
+      run: |
+        rm -f config/credentials.json data/token.json config/alerts.yaml
+
+    - name: Prepare Pages Directory
+      run: |
+        mkdir -p _site
+        cp dashboard.html _site/index.html
 
     - name: Setup Pages
       uses: actions/configure-pages@v5
@@ -70,7 +77,7 @@ Within the workflow, we use the official GitHub-supported Pages deployment actio
     - name: Upload Pages Artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: '.' # Upload root folder containing index.html
+        path: '_site' # Upload isolated site directory containing only index.html
 
     - name: Deploy to GitHub Pages
       id: deployment

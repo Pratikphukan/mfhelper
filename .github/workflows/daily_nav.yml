@@ -77,6 +77,11 @@ jobs:
       run: |
         python dashboard_main.py
 
+    - name: Clean Up Sensitive Config Files
+      if: always()
+      run: |
+        rm -f config/credentials.json data/token.json config/alerts.yaml
+
     - name: Save Daily NAV State Cache
       uses: actions/cache/save@v4
       with:
@@ -88,8 +93,10 @@ jobs:
           data/benchmark_history/
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
 
-    - name: Copy dashboard to server index
-      run: cp dashboard.html index.html
+    - name: Prepare Pages Directory
+      run: |
+        mkdir -p _site
+        cp dashboard.html _site/index.html
 
     - name: Setup Pages
       uses: actions/configure-pages@v5
@@ -97,7 +104,7 @@ jobs:
     - name: Upload Pages Artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: '.'
+        path: '_site'
 
     - name: Deploy to GitHub Pages
       id: deployment
