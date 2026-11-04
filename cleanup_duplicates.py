@@ -15,6 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from mfhelper.config import load_settings as load_app_settings
 from mfhelper.sheets import _load_credentials, HEADER_ROWS
 
 import gspread
@@ -25,11 +26,8 @@ TOKEN_PATH = PROJECT_ROOT / "data" / "token.json"
 
 
 def load_settings() -> tuple[str, str]:
-    import yaml
-    with (PROJECT_ROOT / "config" / "settings.yaml").open("r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-    gs = raw.get("google_sheet", {})
-    return gs["spreadsheet_id"], gs.get("worksheet", "Daily NAV")
+    settings = load_app_settings(PROJECT_ROOT / "config" / "settings.yaml")
+    return settings.google_sheet.spreadsheet_id, settings.google_sheet.worksheet
 
 
 def cleanup(worksheet_name: str | None, dry_run: bool) -> None:

@@ -89,6 +89,8 @@ The column layout is **append-only** -- safe to add or remove funds without losi
 
 ## One-time setup
 
+For a per-user private GitHub Actions setup, follow the [Private copy setup guide](docs/SELF_HOSTED_SETUP.md). It covers creating a private repository from this template, adding your funds and credentials, and enabling the daily workflow.
+
 ### 1. Install dependencies
 
 ```bash
@@ -105,6 +107,7 @@ python3 -m venv .venv        # skip if .venv already exists
    - User type: **External**
    - Fill in app name, your email, and support email
    - Under **Test users**, add your own Google account
+   - **Crucial for unattended runs:** Click **Publish App** on the OAuth consent screen to move from "Testing" to "In Production". In "Testing" mode, Google refresh tokens expire every 7 days, breaking automated runs. In "Production", personal refresh tokens do not expire. (Google verification is not required for personal desktop apps accessing your own sheets).
 4. Create an **OAuth client ID**:
    - Application type: **Desktop app**
    - Any name
@@ -120,7 +123,7 @@ python3 -m venv .venv        # skip if .venv already exists
 
 ### 4. Add your funds
 
-Edit `config/funds.yaml`. The file currently has two placeholder entries -- replace them with your own funds. Each entry needs the AMFI scheme code; the name is optional.
+Edit `config/funds.yaml`. Replace the example entry with the funds you want to track. Each entry needs the AMFI scheme code; the name is optional.
 
 Finding a scheme code:
 - Open https://www.amfiindia.com/spages/NAVAll.txt in a browser

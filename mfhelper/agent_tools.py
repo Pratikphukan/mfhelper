@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from mfhelper.config import AlertRulesConfig, load_alert_settings, load_funds
+from mfhelper.config import AlertRulesConfig, load_alert_settings, load_funds, resolve_config_path
 from mfhelper.metrics import distance_from_200d_sma, distance_from_52w_high, rsi as compute_rsi
 from mfhelper.mfapi import fetch_history
 from mfhelper.returns_calc import risk_adjusted, risk_metrics, trailing_returns
@@ -443,7 +443,7 @@ def screen_dip_and_trim_opportunities(
     from mfhelper.alerts import check_confluence_signal, check_trimming_signal
 
     f_path = funds_path or (CONFIG_DIR / "funds.yaml")
-    a_path = alerts_path or (CONFIG_DIR / "alerts.yaml")
+    a_path = resolve_config_path(alerts_path or (CONFIG_DIR / "alerts.yaml"))
 
     if not f_path.exists():
         return {

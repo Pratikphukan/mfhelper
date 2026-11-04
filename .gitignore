@@ -5,6 +5,7 @@ __pycache__/
 *.pyo
 
 config/credentials.json
+config/*.private.yaml
 data/token.json
 data/last_nav.json
 data/sheet_columns.json
@@ -13,8 +14,12 @@ data/fund_plots/
 data/benchmark_history/
 data/mfapi_cache/
 data/daily_nav_dump.csv
+data/combined_portfolio_allocation.json
+data/tickertape_mappings.json
+data/sheet_columns.json.bak
 
 logs/
+dashboard.html
 
 .DS_Store
 .env

@@ -41,7 +41,7 @@ from zoneinfo import ZoneInfo
 import yaml
 
 from mfhelper.benchmarks import fetch_benchmark_history
-from mfhelper.config import load_funds, load_settings
+from mfhelper.config import load_funds, load_settings, resolve_config_path
 from mfhelper.mfapi import fetch_history
 from mfhelper.returns_calc import compute_fund_returns, unavailable_metrics
 from mfhelper.returns_writer import FundReturnsWriter
@@ -65,6 +65,7 @@ def _load_benchmark_map(path: Path) -> dict[str, dict[str, str]]:
     Returns an empty dict if the file is missing or empty -- benchmark
     comparison is opt-in and silently skipped for funds without a mapping.
     """
+    path = resolve_config_path(path)
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as f:

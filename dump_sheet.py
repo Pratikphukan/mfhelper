@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 # Reuse the credential loader already in this project
+from mfhelper.config import load_settings as load_app_settings
 from mfhelper.sheets import _load_credentials
 
 import gspread
@@ -29,11 +30,8 @@ DEFAULT_OUT = PROJECT_ROOT / "data" / "daily_nav_dump.csv"
 
 def load_settings() -> tuple[str, str]:
     """Return (spreadsheet_id, worksheet_name) from config/settings.yaml."""
-    import yaml
-    with (PROJECT_ROOT / "config" / "settings.yaml").open("r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-    gs = raw.get("google_sheet", {})
-    return gs["spreadsheet_id"], gs.get("worksheet", "Daily NAV")
+    settings = load_app_settings(PROJECT_ROOT / "config" / "settings.yaml")
+    return settings.google_sheet.spreadsheet_id, settings.google_sheet.worksheet
 
 
 def dump(worksheet_name: str | None, out_path: Path | None, print_only: bool) -> None:
