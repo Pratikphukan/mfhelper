@@ -19,6 +19,7 @@ data/tickertape_mappings.json
 data/sheet_columns.json.bak
 
 logs/
+dashboard.html
 
 .DS_Store
 .env

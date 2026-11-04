@@ -22,7 +22,7 @@ Template repositories start with independent history; updates are manual. The on
 
 ## Generated data
 
-Remove generated portfolio snapshots and mapping caches from tracked Git files and add them to `.gitignore`. GitHub Actions may recreate them per user's own repository and cache them there.
+Remove generated portfolio snapshots, mapping caches, and the generated dashboard from tracked Git files and add them to `.gitignore`. GitHub Actions may recreate them per user's own repository and cache runtime state there. The dashboard generator remains in source control; its output contains portfolio data and must be generated from each user's own config.
 
 ## Privacy limitation
 
