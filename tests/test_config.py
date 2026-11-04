@@ -70,3 +70,14 @@ def test_load_funds_accepts_numeric_strings(tmp_path, field):
 
     value = funds[0].weight if field == "weight" else funds[0].expense_ratio_pct
     assert value == 1.25
+
+
+def test_load_funds_prefers_private_override(tmp_path):
+    public_file = tmp_path / "funds.yaml"
+    public_file.write_text('funds:\n  - code: "11111"\n', encoding="utf-8")
+    private_file = tmp_path / "funds.private.yaml"
+    private_file.write_text('funds:\n  - code: "22222"\n', encoding="utf-8")
+
+    funds = load_funds(public_file)
+    assert len(funds) == 1
+    assert funds[0].code == "22222"

@@ -27,6 +27,14 @@ The files in the template are examples. Replace the placeholders before turning 
 
 Follow the main README's OAuth setup to create a Google OAuth desktop client and create your sheet. Save the downloaded client file as `config/credentials.json` in your local clone.
 
+> ⚠️ **Important — Avoid 7-Day Token Expiration:**
+> When configuring the OAuth consent screen with user type **External**, Google initially places the app in **Testing** status. Refresh tokens issued in Testing status **expire after exactly 7 days**, which causes unattended daily Actions runs to fail after the first week.
+>
+> To obtain a permanent, non-expiring refresh token:
+> 1. In Google Cloud Console, open **APIs & Services → OAuth consent screen**.
+> 2. Click **Publish App** to switch the Publishing status to **In Production**. (Google does *not* require app verification review for personal accounts accessing their own sheets; you will simply click *"Advanced → Go to app (unsafe)"* during the initial one-time sign-in).
+> 3. Ensure your app is published to Production **before** generating your token in the next step.
+
 Install the project dependencies in the clone first:
 
 ```bash

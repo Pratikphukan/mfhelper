@@ -107,6 +107,7 @@ python3 -m venv .venv        # skip if .venv already exists
    - User type: **External**
    - Fill in app name, your email, and support email
    - Under **Test users**, add your own Google account
+   - **Crucial for unattended runs:** Click **Publish App** on the OAuth consent screen to move from "Testing" to "In Production". In "Testing" mode, Google refresh tokens expire every 7 days, breaking automated runs. In "Production", personal refresh tokens do not expire. (Google verification is not required for personal desktop apps accessing your own sheets).
 4. Create an **OAuth client ID**:
    - Application type: **Desktop app**
    - Any name
