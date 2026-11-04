@@ -19,6 +19,8 @@ concurrency:
 jobs:
   run-scheduler:
     runs-on: ubuntu-latest
+    # Template copies don't run until the user has completed setup.
+    if: vars.MFHELPER_SETUP_COMPLETE == 'true'
 
     steps:
     - name: Check out repository
@@ -53,11 +55,17 @@ jobs:
         GCP_CRED_BASE64: ${{ secrets.GCP_CREDENTIALS_JSON }}
         GCP_TOKEN_BASE64: ${{ secrets.GCP_TOKEN_JSON }}
         ALERTS_YAML_BASE64: ${{ secrets.ALERTS_YAML }}
+        FUNDS_YAML: ${{ secrets.MFHELPER_FUNDS_YAML }}
+        SETTINGS_YAML: ${{ secrets.MFHELPER_SETTINGS_YAML }}
+        BENCHMARKS_YAML: ${{ secrets.MFHELPER_BENCHMARKS_YAML }}
       run: |
         mkdir -p config data
         echo "$GCP_CRED_BASE64" | base64 -d > config/credentials.json
         echo "$GCP_TOKEN_BASE64" | base64 -d > data/token.json
         echo "$ALERTS_YAML_BASE64" | base64 -d > config/alerts.yaml
+        if [ -n "$FUNDS_YAML" ]; then printf '%s' "$FUNDS_YAML" > config/funds.yaml; fi
+        if [ -n "$SETTINGS_YAML" ]; then printf '%s' "$SETTINGS_YAML" > config/settings.yaml; fi
+        if [ -n "$BENCHMARKS_YAML" ]; then printf '%s' "$BENCHMARKS_YAML" > config/benchmarks.yaml; fi
 
     - name: Run Daily NAV Tracker
       env:
@@ -81,6 +89,7 @@ jobs:
       if: always()
       run: |
         rm -f config/credentials.json data/token.json config/alerts.yaml
+        rm -f config/funds.yaml config/settings.yaml config/benchmarks.yaml
 
     - name: Save Daily NAV State Cache
       uses: actions/cache/save@v4
@@ -94,18 +103,22 @@ jobs:
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
 
     - name: Prepare Pages Directory
+      if: vars.PUBLISH_PUBLIC_DASHBOARD == 'true'
       run: |
         mkdir -p _site
         cp dashboard.html _site/index.html
 
     - name: Setup Pages
+      if: vars.PUBLISH_PUBLIC_DASHBOARD == 'true'
       uses: actions/configure-pages@v5
 
     - name: Upload Pages Artifact
+      if: vars.PUBLISH_PUBLIC_DASHBOARD == 'true'
       uses: actions/upload-pages-artifact@v3
       with:
         path: '_site'
 
     - name: Deploy to GitHub Pages
+      if: vars.PUBLISH_PUBLIC_DASHBOARD == 'true'
       id: deployment
       uses: actions/deploy-pages@v4

@@ -9,6 +9,14 @@ from pathlib import Path
 import yaml
 
 
+def resolve_config_path(path: Path) -> Path:
+    """Prefer an ignored ``*.private.yaml`` override for local personal config."""
+    private_path = path.with_name(f"{path.stem}.private{path.suffix}")
+    if private_path.is_file():
+        return private_path
+    return path
+
+
 @dataclass(frozen=True)
 class FundConfig:
     code: str
@@ -47,6 +55,7 @@ class Settings:
 
 
 def load_funds(path: Path) -> list[FundConfig]:
+    path = resolve_config_path(path)
     with path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     entries = raw.get("funds") or raw.get("etfs") or []
@@ -142,10 +151,11 @@ def load_analytics_funds(path: Path) -> list[FundConfig]:
     than the daily-tracking list in ``funds.yaml`` without disturbing
     the scheduler.
     """
-    return load_funds(path)
+    return load_funds(resolve_config_path(path))
 
 
 def load_settings(path: Path) -> Settings:
+    path = resolve_config_path(path)
     with path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
@@ -212,7 +222,7 @@ def load_alert_settings(path: Path) -> AlertSettings:
     Falls back to ``config/alerts_example.yaml`` if the ignored user config
     is missing.
     """
-    target_path = path
+    target_path = resolve_config_path(path)
     if not target_path.exists():
         example_path = path.parent / "alerts_example.yaml"
         if example_path.exists():

@@ -49,7 +49,7 @@ import matplotlib.dates as mdates
 from matplotlib.figure import Figure
 
 from mfhelper.benchmarks import BenchmarkHistory, fetch_benchmark_history
-from mfhelper.config import load_funds
+from mfhelper.config import load_funds, resolve_config_path
 from mfhelper.mfapi import NavHistoryPoint, fetch_history
 from mfhelper.returns_calc import (
     ANCHOR_TOLERANCE_DAYS,
@@ -92,6 +92,7 @@ def _configure_logging() -> None:
 
 
 def _load_benchmark_map(path: Path) -> dict[str, dict[str, str | None]]:
+    path = resolve_config_path(path)
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as f:
