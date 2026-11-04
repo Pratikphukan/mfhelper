@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 
 import yaml
@@ -71,15 +72,32 @@ def load_funds(path: Path) -> list[FundConfig]:
         if name is not None:
             name = str(name).strip() or None
 
-        expense_raw = entry.get("expense_ratio")
-        expense_ratio_pct: float | None = None
-        if expense_raw is not None:
+        def parse_non_negative_number(field_name: str) -> float | None:
+            raw_value = entry.get(field_name)
+            if raw_value is None:
+                return None
+            # bool is a subclass of int in Python, but should not be accepted
+            # as a numeric configuration value (True would otherwise become 1.0).
+            if isinstance(raw_value, bool):
+                raise ValueError(
+                    f"{path}: fund #{i} field '{field_name}' must be a finite, "
+                    f"non-negative number, got {raw_value!r}"
+                )
             try:
-                expense_ratio_pct = float(expense_raw)
+                value = float(raw_value)
             except (TypeError, ValueError):
                 raise ValueError(
-                    f"{path}: fund #{i} has non-numeric 'expense_ratio': {expense_raw!r}"
+                    f"{path}: fund #{i} field '{field_name}' must be a finite, "
+                    f"non-negative number, got {raw_value!r}"
+                ) from None
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    f"{path}: fund #{i} field '{field_name}' must be a finite, "
+                    f"non-negative number, got {raw_value!r}"
                 )
+            return value
+
+        expense_ratio_pct = parse_non_negative_number("expense_ratio")
 
         slug_raw = entry.get("groww_slug")
         groww_slug: str | None = None
@@ -91,18 +109,17 @@ def load_funds(path: Path) -> list[FundConfig]:
         if category_raw is not None:
             category = str(category_raw).strip().lower() or None
 
-        weight_raw = entry.get("weight")
-        weight: float | None = None
-        if weight_raw is not None:
-            try:
-                weight = float(weight_raw)
-            except (TypeError, ValueError):
-                raise ValueError(f"{path}: fund #{i} has non-numeric 'weight': {weight_raw!r}")
+        weight = parse_non_negative_number("weight")
 
-        active_raw = entry.get("active")
         active: bool = True
-        if active_raw is not None:
-            active = bool(active_raw)
+        if "active" in entry:
+            active_raw = entry["active"]
+            if not isinstance(active_raw, bool):
+                raise ValueError(
+                    f"{path}: fund #{i} field 'active' must be a YAML boolean "
+                    f"(true or false), got {active_raw!r}"
+                )
+            active = active_raw
 
         funds.append(FundConfig(
             code=code,
