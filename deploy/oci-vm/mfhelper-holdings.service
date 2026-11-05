@@ -1,0 +1,23 @@
+[Unit]
+Description=MFHelper private CDSL holdings importer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mfhelper
+Group=mfhelper
+WorkingDirectory=/opt/mfhelper/app
+EnvironmentFile=/etc/mfhelper-holdings.env
+ExecStart=/opt/mfhelper/venv/bin/uvicorn mfhelper.oci_holdings_import_app:app --host 127.0.0.1 --port 8765 --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-access-log
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

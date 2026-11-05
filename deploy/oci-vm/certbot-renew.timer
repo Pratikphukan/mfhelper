@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for renewal of the MFHelper IP certificate
+
+[Timer]
+OnBootSec=10m
+OnUnitActiveSec=12h
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
