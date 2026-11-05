@@ -43,12 +43,23 @@ _DATE_TOKEN = (
 )
 _EXPLICIT_DATE_PATTERNS = (
     (
+        5,
+        re.compile(
+            rf"\b(?:statement\s+)?for\s+the\s+period\s+from\s*"
+            rf"({_DATE_TOKEN})\s+to\s+({_DATE_TOKEN})",
+            re.IGNORECASE,
+        ),
+        2,
+    ),
+    (
         4,
         re.compile(
-            rf"\b(?:portfolio(?:\s+(?:value|valuation))?|holdings?)"
+            rf"\b(?:portfolio(?:\s+(?:value|valuation))?|holdings?|"
+            rf"mutual\s+fund\s+units\s+held)"
             rf"\s+as\s+(?:on|of)\s*[:\-]?\s*({_DATE_TOKEN})",
             re.IGNORECASE,
         ),
+        1,
     ),
     (
         3,
@@ -57,6 +68,7 @@ _EXPLICIT_DATE_PATTERNS = (
             rf"\s*[:\-]?\s*({_DATE_TOKEN})",
             re.IGNORECASE,
         ),
+        1,
     ),
     (
         2,
@@ -64,6 +76,7 @@ _EXPLICIT_DATE_PATTERNS = (
             rf"\bvaluation\s+as\s+(?:on|of)\s*[:\-]?\s*({_DATE_TOKEN})",
             re.IGNORECASE,
         ),
+        1,
     ),
 )
 _GENERIC_AS_OF_DATE_RE = re.compile(
@@ -141,10 +154,10 @@ def parse_cdsl_cas(pdf_bytes: bytes, pan: str) -> ParsedCas:
 
 def _find_statement_date(text: str) -> date:
     explicit: list[tuple[int, date]] = []
-    for priority, pattern in _EXPLICIT_DATE_PATTERNS:
+    for priority, pattern, date_group in _EXPLICIT_DATE_PATTERNS:
         for match in pattern.finditer(text):
             try:
-                explicit.append((priority, _parse_date(match.group(1))))
+                explicit.append((priority, _parse_date(match.group(date_group))))
             except ValueError:
                 continue
 
@@ -216,7 +229,7 @@ def _header_kind(value: str) -> str | None:
         return "scheme_name"
     if any(word in header for word in ("unit", "quantity")):
         return "units"
-    if any(phrase in header for phrase in (
+    if "valuation" in header or any(phrase in header for phrase in (
         "current value", "market value", "closing value", "valuation value",
         "value as on", "value as of", "portfolio value",
     )):

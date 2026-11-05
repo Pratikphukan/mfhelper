@@ -25,7 +25,7 @@ No shared MFHelper service or portfolio database is proposed. The Codespace belo
 - First supported source: the user's CDSL CAS, identified from their inbox.
 - CDSL documents that the PDF password is the first/sole demat account holder's PAN in uppercase.
 - Ask for the PAN in the private import page for that import only. Do not store it in repository files, Codespaces secrets, logs, or the snapshot.
-- Recognize CDSL statement fields by their labels and fail closed if the date or holdings table is unsupported. The user's encrypted sample has not yet been parsed, so its exact layout remains to be confirmed in the Codespace.
+- Recognize CDSL statement fields by their labels and fail closed if the date or holdings table is unsupported. The reviewed sample labels a reporting period and a mutual-fund holdings table with `Closing Balance (Units)` and `Valuation` columns. Use the period end as the holdings date; confirm end-to-end extraction in the Codespace before relying on this parser for the sample.
 - Upload the PDF only to the authenticated private Codespaces port. Keep it in temporary workspace storage and delete it on success and every failure path.
 
 ## Fields to Retain
