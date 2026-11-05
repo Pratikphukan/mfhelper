@@ -92,6 +92,7 @@ def ensure_import_context() -> None:
     """Reject uploads before handling sensitive input outside the intended repo."""
     _ensure_codespace()
     _ensure_private_repository()
+    _ensure_private_codespace_port()
 
 
 def _decimal_string(value: Decimal) -> str:
@@ -139,6 +140,29 @@ def _ensure_private_repository() -> None:
         raise CacheError(
             "For privacy, import is available only from a private GitHub repository."
         )
+
+
+def _ensure_private_codespace_port() -> None:
+    codespace_name = os.environ.get("CODESPACE_NAME", "").strip()
+    if not codespace_name:
+        raise CacheError("The Codespace port visibility could not be verified; no upload was accepted.")
+    try:
+        result = subprocess.run(
+            [
+                "gh", "codespace", "ports", "--codespace", codespace_name,
+                "--json", "sourcePort,visibility",
+                "--jq", '.[] | select(.sourcePort == 8765) | .visibility',
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=20,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise CacheError("The Codespace port visibility could not be verified; no upload was accepted.") from exc
+    if result.returncode != 0 or result.stdout.strip().lower() != "private":
+        raise CacheError("Set Codespaces port 8765 to Private before uploading a statement.")
 
 
 def _ensure_repo_file_clean() -> None:

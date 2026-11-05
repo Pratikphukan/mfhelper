@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+import subprocess
 
 import pytest
 
@@ -174,3 +175,39 @@ def test_push_retry_rejects_commit_that_also_changes_other_files(monkeypatch):
         holdings_cache._push_existing_commit_if_needed()
 
     assert not any(args[:1] == ["push"] for args in calls)
+
+
+def test_private_port_visibility_is_required(monkeypatch):
+    monkeypatch.setenv("CODESPACE_NAME", "sample-codespace")
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen["args"] = args
+        seen["kwargs"] = kwargs
+        return subprocess.CompletedProcess(args, 0, "private\n", "")
+
+    monkeypatch.setattr(holdings_cache.subprocess, "run", fake_run)
+
+    holdings_cache._ensure_private_codespace_port()
+
+    assert "8765" in seen["args"][-1]
+    assert "sample-codespace" in seen["args"]
+
+
+def test_public_or_unverifiable_port_visibility_is_rejected(monkeypatch):
+    monkeypatch.setenv("CODESPACE_NAME", "sample-codespace")
+    monkeypatch.setattr(
+        holdings_cache.subprocess,
+        "run",
+        lambda args, **kwargs: subprocess.CompletedProcess(args, 0, "public\n", ""),
+    )
+
+    with pytest.raises(CacheError, match="Set Codespaces port 8765 to Private"):
+        holdings_cache._ensure_private_codespace_port()
+
+
+def test_port_visibility_check_requires_codespace_name(monkeypatch):
+    monkeypatch.delenv("CODESPACE_NAME", raising=False)
+
+    with pytest.raises(CacheError, match="visibility could not be verified"):
+        holdings_cache._ensure_private_codespace_port()

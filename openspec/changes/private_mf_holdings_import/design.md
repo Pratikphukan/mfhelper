@@ -57,6 +57,6 @@ Do not retain the source PDF, PAN, folio/account numbers, address, bank details,
 - A Codespace is created from the user's own private repository. The Codespaces import page runs on a privately forwarded port available only to that user.
 - The PDF is uploaded to temporary Codespace storage and removed after processing; it is never committed to the repository.
 - Store the minimal holdings snapshot as a normal data file in the private repository, without separate file encryption. This avoids per-user key setup; repository access controls limit who can read it.
-- Before accepting the upload, require a Codespace and use GitHub CLI to verify the repository is private. Use the Codespace's GitHub identity to commit and push only `data/private_holdings.json`.
+- Before accepting the upload, require a Codespace, use GitHub CLI to verify the repository is private and forwarded port `8765` is private, and then allow multipart parsing. Use the Codespace's GitHub identity to commit and push only `data/private_holdings.json`.
 - Check that the current branch is synchronized with its upstream before creating a snapshot commit. A retry after a failed push is allowed only for exactly one unpushed commit that changes the snapshot file alone.
 - The Codespace may incur usage beyond the user's included GitHub quota; it should be stopped after import.

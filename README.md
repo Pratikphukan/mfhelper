@@ -100,7 +100,7 @@ This optional importer processes a CDSL CAS PDF in a Codespace created from your
 3. Select the original CDSL CAS PDF and enter the first or sole account holder's PAN as its password.
 4. On a successful import, the Codespace commits and pushes the extracted snapshot to `data/private_holdings.json`. Stop the Codespace when finished to avoid using Codespaces quota.
 
-The importer checks that it is running in a Codespace for a private repository before processing the upload. The forwarded port must remain **Private**. If it cannot recognize the statement date or holdings table, it stops and leaves the existing snapshot unchanged. This first version does not add the snapshot to the public dashboard or daily workflow.
+The importer checks that it is running in a Codespace for a private repository and verifies port `8765` is **Private** before reading the upload. If it cannot recognize the statement date or holdings table, it stops and leaves the existing snapshot unchanged. This first version does not add the snapshot to the public dashboard or daily workflow.
 
 ### 1. Install dependencies
 
