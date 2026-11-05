@@ -91,7 +91,13 @@ The column layout is **append-only** -- safe to add or remove funds without losi
 
 For a per-user private GitHub Actions setup, follow the [Private copy setup guide](docs/SELF_HOSTED_SETUP.md). It covers creating a private repository from this template, adding your funds and credentials, and enabling the daily workflow.
 
-### Import a CDSL holdings statement (private Codespace)
+### Import a CDSL holdings statement (private OCI worker)
+
+To import a CDSL CAS without creating a private GitHub repository, run the importer in your own OCI Compute account. MFHelper authenticates you with GitHub OAuth, processes the PDF on the VM, and saves only the latest holdings snapshot in your private OCI Object Storage bucket. The PDF and PAN are temporary; the holdings snapshot is not yet used by the daily workflow or public dashboard.
+
+Follow the [OCI Compute setup guide](deploy/oci-vm/README.md). It covers the private bucket, least-scope VM access, GitHub sign-in, HTTPS using the VM's public IP, and automatic certificate renewal.
+
+### Legacy import option (private Codespace)
 
 This optional importer processes a CDSL CAS PDF in a Codespace created from your own **private** MFHelper repository. It saves only the extracted holdings snapshot to `data/private_holdings.json`; it does not retain or commit the PDF or PAN. The snapshot is a regular file in your private repository, so anyone with repository access can read it. Git history also keeps older versions of the snapshot.
 

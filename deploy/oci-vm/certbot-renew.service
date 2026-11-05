@@ -1,0 +1,6 @@
+[Unit]
+Description=Renew the short-lived Let's Encrypt IP certificate for MFHelper
+
+[Service]
+Type=oneshot
+ExecStart=/opt/certbot/bin/certbot renew --deploy-hook "systemctl reload nginx"
