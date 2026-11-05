@@ -227,6 +227,10 @@ def _header_kind(value: str) -> str | None:
         return "scheme_code"
     if any(word in header for word in ("scheme", "fund name", "mutual fund")):
         return "scheme_name"
+    if "opening balance" in header and any(word in header for word in ("unit", "quantity")):
+        return "opening_units"
+    if "closing balance" in header and any(word in header for word in ("unit", "quantity")):
+        return "closing_units"
     if any(word in header for word in ("unit", "quantity")):
         return "units"
     if "valuation" in header or any(phrase in header for phrase in (
@@ -248,10 +252,25 @@ def _table_header(table: list[list[object]]) -> tuple[int, dict[str, int]] | Non
                 if text:
                     combined[index] = f"{combined[index]} {text}".strip()
         kinds: dict[str, int] = {}
+        unit_columns: dict[str, list[int]] = {
+            "units": [],
+            "opening_units": [],
+            "closing_units": [],
+        }
         for index, cell in enumerate(combined):
             kind = _header_kind(cell)
-            if kind and kind not in kinds:
+            if kind in unit_columns:
+                unit_columns[kind].append(index)
+            elif kind and kind not in kinds:
                 kinds[kind] = index
+        closing_columns = unit_columns["closing_units"]
+        generic_columns = unit_columns["units"]
+        if len(closing_columns) == 1:
+            kinds["units"] = closing_columns[0]
+        elif not closing_columns and not unit_columns["opening_units"] and len(generic_columns) == 1:
+            kinds["units"] = generic_columns[0]
+        else:
+            continue
         if {"scheme_name", "units", "statement_value"}.issubset(kinds):
             return header_row, kinds
     return None
@@ -287,18 +306,26 @@ def _extract_holdings(tables: Iterable[list[list[object]]]) -> list[Holding]:
         header_row, columns = header_info
         for row in table[header_row + 1 :]:
             cells = [_norm(cell) for cell in row or []]
+            if not any(cells):
+                continue
             width = max(columns.values())
             if len(cells) <= width:
+                raise CasImportError(
+                    "The CDSL holdings table has an incomplete row. No holdings were saved."
+                )
+            name = cells[columns["scheme_name"]].strip()
+            if re.search(r"\b(total|grand total|sub total)\b", name, re.IGNORECASE):
                 continue
-            name = cells[columns["scheme_name"]]
             units = _parse_decimal(cells[columns["units"]])
             value = _parse_decimal(cells[columns["statement_value"]])
             if not name or units is None or value is None:
-                continue
-            if re.search(r"\b(total|grand total|sub total)\b", name, re.IGNORECASE):
-                continue
+                raise CasImportError(
+                    "The CDSL holdings table has an incomplete row. No holdings were saved."
+                )
             if units < 0 or value < 0:
-                continue
+                raise CasImportError(
+                    "The CDSL holdings table has an invalid row. No holdings were saved."
+                )
 
             isin = None
             if "isin" in columns and len(cells) > columns["isin"]:

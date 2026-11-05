@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import hmac
 import secrets
 
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from mfhelper.casl_import import CasImportError, parse_cdsl_cas
@@ -17,6 +18,19 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 _FORM_TOKEN = secrets.token_urlsafe(32)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@app.middleware("http")
+async def guard_import_request(request: Request, call_next):
+    # FastAPI parses multipart fields only after middleware calls downstream.
+    # Check Codespaces/repository privacy before Starlette reads and spools the
+    # PDF and password from the request body.
+    if request.method == "POST" and request.url.path == "/import":
+        try:
+            await asyncio.to_thread(ensure_import_context)
+        except CacheError as exc:
+            return HTMLResponse(_page(str(exc), error=True), status_code=403)
+    return await call_next(request)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -34,9 +48,6 @@ async def import_statement(
     try:
         if not hmac.compare_digest(form_token, _FORM_TOKEN):
             return HTMLResponse(_page("This import page expired. Reload it and try again.", error=True), status_code=400)
-        # Check the Codespace and repository privacy before accepting the PDF
-        # or password into the importer process.
-        ensure_import_context()
         if not file.filename or not file.filename.lower().endswith(".pdf"):
             return HTMLResponse(_page("Choose the original CDSL CAS PDF file.", error=True), status_code=400)
 

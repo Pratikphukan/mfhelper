@@ -11,6 +11,10 @@
 - [x] Build the private upload page and Codespace processing flow.
 - [x] Parse and validate fund identity, units, statement values, and statement date; fail safely when required fields are missing.
 - [x] Use the CDSL statement period end as the holdings date; prefer labeled portfolio/statement dates over generic NAV dates and cover precedence with regression tests.
+- [x] Reject incomplete holding rows and select the closing-balance units column when opening and closing balances are both present.
+- [x] Check branch synchronization before creating a snapshot commit; retry a failed push only for a single snapshot-only commit.
+- [x] Check Codespaces/repository privacy in middleware before multipart form parsing.
+- [x] Add an in-memory synthetic encrypted CDSL PDF test for password decryption and end-to-end date/table extraction.
 - [x] Prompt for PAN in the import page and avoid persisting or logging it.
 - [x] Save only the minimal holdings snapshot in that user's private repository; close and discard the uploaded file after processing.
 - [x] Make updates atomic and repeated imports idempotent; preserve the previous snapshot on parse/commit failure.

@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from io import BytesIO
 
 import pytest
 
@@ -10,6 +11,7 @@ from mfhelper.casl_import import (
     _header_kind,
     _parse_decimal,
     _table_header,
+    parse_cdsl_cas,
     validate_pan,
 )
 
@@ -55,7 +57,9 @@ def test_parse_decimal_returns_none_for_missing_or_non_finite_values(value):
     ("header", "expected"),
     [
         ("Scheme Name", "scheme_name"),
-        ("Closing Balance (Units)", "units"),
+        ("Closing Balance (Units)", "closing_units"),
+        ("Opening Balance (Units)", "opening_units"),
+        ("Units", "units"),
         ("Valuation (₹)", "statement_value"),
         ("AMFI Scheme Code", "scheme_code"),
         ("ISIN", "isin"),
@@ -83,6 +87,31 @@ def test_table_header_rejects_transaction_amount_instead_of_valuation():
     table = [["Scheme Name", "Units", "Transaction Amount"], ["Fund", "2", "100"]]
 
     assert _table_header(table) is None
+
+
+def test_table_header_selects_closing_balance_when_opening_and_closing_exist():
+    table = [
+        ["Scheme Name", "Opening Balance (Units)", "Closing Balance (Units)", "Valuation"],
+        ["Sample Fund", "1", "2", "250.00"],
+    ]
+
+    header = _table_header(table)
+
+    assert header is not None
+    assert header[1]["units"] == 2
+    holdings = _extract_holdings([table])
+    assert holdings[0].units == Decimal("2")
+
+
+def test_rejects_malformed_row_instead_of_saving_partial_holdings():
+    table = [
+        ["Scheme Name", "Closing Balance (Units)", "Valuation"],
+        ["Complete Fund", "2", "250.00"],
+        ["Incomplete Fund", "1", ""],
+    ]
+
+    with pytest.raises(CasImportError, match="incomplete row"):
+        _extract_holdings([table])
 
 
 def test_prefers_portfolio_date_over_generic_nav_and_generation_dates():
@@ -149,3 +178,73 @@ def test_conflicting_highest_priority_labeled_dates_are_rejected():
 
     with pytest.raises(CasImportError, match="conflicting labeled statement dates"):
         _find_statement_date(text)
+
+
+def _make_encrypted_cdsl_pdf():
+    pytest.importorskip("pypdf")
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    page[NameObject("/Resources")] = DictionaryObject(
+        {
+            NameObject("/Font"): DictionaryObject(
+                {NameObject("/F1"): writer._add_object(font)}
+            )
+        }
+    )
+
+    content = b"""\
+0.5 w
+50 660 m 550 660 l S
+50 630 m 550 630 l S
+50 600 m 550 600 l S
+50 600 m 50 660 l S
+300 600 m 300 660 l S
+425 600 m 425 660 l S
+550 600 m 550 660 l S
+BT /F1 10 Tf 50 750 Td (Central Depository Services CDSL) Tj ET
+BT /F1 10 Tf 50 730 Td (Statement for the period from 01-Sep-2026 to 30-Sep-2026) Tj ET
+BT /F1 8 Tf 55 643 Td (Scheme Name) Tj ET
+BT /F1 8 Tf 305 643 Td (Closing Balance) Tj ET
+BT /F1 8 Tf 305 633 Td ((Units)) Tj ET
+BT /F1 8 Tf 430 643 Td (Valuation) Tj ET
+BT /F1 8 Tf 55 608 Td (Synthetic Direct Growth) Tj ET
+BT /F1 8 Tf 330 608 Td (12.5) Tj ET
+BT /F1 8 Tf 455 608 Td (1234.50) Tj ET
+"""
+    stream = DecodedStreamObject()
+    stream.set_data(content)
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    writer.encrypt("ABCDE1234F")
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def test_decrypts_and_extracts_synthetic_encrypted_cdsl_pdf():
+    pytest.importorskip("pdfplumber")
+    pdf_bytes = _make_encrypted_cdsl_pdf()
+
+    parsed = parse_cdsl_cas(pdf_bytes, "abcde1234f")
+
+    assert parsed.statement_date == date(2026, 9, 30)
+    assert len(parsed.holdings) == 1
+    assert parsed.holdings[0].scheme_name == "Synthetic Direct Growth"
+    assert parsed.holdings[0].units == Decimal("12.5")
+    assert parsed.holdings[0].statement_value == Decimal("1234.50")
+
+
+def test_encrypted_pdf_rejects_incorrect_pan():
+    pdf_bytes = _make_encrypted_cdsl_pdf()
+
+    with pytest.raises(CasImportError, match="PAN did not unlock"):
+        parse_cdsl_cas(pdf_bytes, "ZZZZZ9999Z")

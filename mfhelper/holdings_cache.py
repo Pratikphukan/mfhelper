@@ -62,6 +62,7 @@ def save_snapshot_and_push(parsed: ParsedCas) -> str:
             _push_existing_commit_if_needed()
             return "This statement was already imported; the holdings cache is up to date."
 
+    _ensure_branch_synchronized()
     previous_bytes = HOLDINGS_PATH.read_bytes() if HOLDINGS_PATH.exists() else None
     _atomic_write(payload)
     try:
@@ -75,7 +76,7 @@ def save_snapshot_and_push(parsed: ParsedCas) -> str:
         ) from None
 
     try:
-        _git(["push", "-u", "origin", "HEAD"])
+        _git(["push", "origin", "HEAD"])
     except CacheError:
         # The user can retry by importing the same statement; the duplicate
         # path will push this already-created commit without parsing twice.
@@ -148,18 +149,49 @@ def _ensure_repo_file_clean() -> None:
         )
 
 
-def _push_existing_commit_if_needed() -> None:
-    # Retry a previous push failure before comparing the new statement. This
-    # keeps a locally committed snapshot from being mistaken for remote state.
+def _branch_sync_counts() -> tuple[int, int]:
     try:
-        ahead = _git(["rev-list", "--count", "@{u}..HEAD"])
+        counts = _git(["rev-list", "--left-right", "--count", "@{u}...HEAD"]).split()
     except CacheError:
-        # A new Codespace branch may not have an upstream yet. A duplicate
-        # import is a safe point to retry establishing it.
-        _git(["push", "-u", "origin", "HEAD"])
+        raise CacheError(
+            "This Codespace branch has no GitHub upstream. Set one before importing holdings."
+        ) from None
+    if len(counts) != 2 or not all(value.isdigit() for value in counts):
+        raise CacheError("The Codespace branch status could not be verified; no snapshot was changed.")
+    behind, ahead = (int(value) for value in counts)
+    return behind, ahead
+
+
+def _ensure_branch_synchronized() -> None:
+    behind, ahead = _branch_sync_counts()
+    if behind or ahead:
+        raise CacheError(
+            "The Codespace branch has local or remote commits not synchronized with GitHub. "
+            "Synchronize it before importing so no unrelated commits are pushed."
+        )
+
+
+def _push_existing_commit_if_needed() -> None:
+    # A failed previous push can be retried only when HEAD is exactly one
+    # snapshot-only commit on top of its upstream. Never push arbitrary commits.
+    behind, ahead = _branch_sync_counts()
+    if ahead == 0 and behind == 0:
         return
-    if ahead.isdigit() and int(ahead) > 0:
-        _git(["push", "-u", "origin", "HEAD"])
+    if behind or ahead != 1:
+        raise CacheError(
+            "The Codespace branch has unrelated or divergent commits. "
+            "Synchronize it manually before retrying the import."
+        )
+
+    upstream = _git(["rev-parse", "@{u}"])
+    parent = _git(["rev-parse", "HEAD^"])
+    changed_paths = _git(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]).splitlines()
+    if parent != upstream or changed_paths != [_SAFE_REPO_PATH]:
+        raise CacheError(
+            "The unpushed commit is not limited to the holdings snapshot. "
+            "Review and synchronize the branch manually before retrying."
+        )
+    _git(["push", "origin", "HEAD"])
 
 
 def _read_current() -> dict[str, object] | None:

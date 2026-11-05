@@ -26,6 +26,7 @@ No shared MFHelper service or portfolio database is proposed. The Codespace belo
 - CDSL documents that the PDF password is the first/sole demat account holder's PAN in uppercase.
 - Ask for the PAN in the private import page for that import only. Do not store it in repository files, Codespaces secrets, logs, or the snapshot.
 - Recognize CDSL statement fields by their labels and fail closed if the date or holdings table is unsupported. The reviewed sample labels a reporting period and a mutual-fund holdings table with `Closing Balance (Units)` and `Valuation` columns. Use the period end as the holdings date; confirm end-to-end extraction in the Codespace before relying on this parser for the sample.
+- If a table has both opening and closing unit balances, use the closing balance. Reject malformed non-total holding rows rather than save a partial snapshot.
 - Upload the PDF only to the authenticated private Codespaces port. Keep it in temporary workspace storage and delete it on success and every failure path.
 
 ## Fields to Retain
@@ -57,4 +58,5 @@ Do not retain the source PDF, PAN, folio/account numbers, address, bank details,
 - The PDF is uploaded to temporary Codespace storage and removed after processing; it is never committed to the repository.
 - Store the minimal holdings snapshot as a normal data file in the private repository, without separate file encryption. This avoids per-user key setup; repository access controls limit who can read it.
 - Before accepting the upload, require a Codespace and use GitHub CLI to verify the repository is private. Use the Codespace's GitHub identity to commit and push only `data/private_holdings.json`.
+- Check that the current branch is synchronized with its upstream before creating a snapshot commit. A retry after a failed push is allowed only for exactly one unpushed commit that changes the snapshot file alone.
 - The Codespace may incur usage beyond the user's included GitHub quota; it should be stopped after import.
