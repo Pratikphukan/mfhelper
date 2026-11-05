@@ -1,8 +1,88 @@
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
-from mfhelper.casl_import import CasImportError, _extract_holdings, _find_statement_date
+from mfhelper.casl_import import (
+    CasImportError,
+    _extract_holdings,
+    _find_statement_date,
+    _header_kind,
+    _parse_decimal,
+    _table_header,
+    validate_pan,
+)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("abcde1234f", "ABCDE1234F"),
+        (" ABCDE1234F ", "ABCDE1234F"),
+    ],
+)
+def test_validate_pan_accepts_valid_pan_and_normalizes_case(value, expected):
+    assert validate_pan(value) == expected
+
+
+@pytest.mark.parametrize("value", ["", "ABCDE1234", "ABCDE12345F", "ABCDEF1234G", "ABCDE 1234F"])
+def test_validate_pan_rejects_invalid_formats(value):
+    with pytest.raises(CasImportError):
+        validate_pan(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("₹1,23,456.78", Decimal("123456.78")),
+        ("Rs. 1,234.50", Decimal("1234.50")),
+        ("Rs 1,234", Decimal("1234")),
+        ("INR 4,321.00", Decimal("4321.00")),
+        ("(1,234.50)", Decimal("-1234.50")),
+        ("-₹12.5", Decimal("-12.5")),
+    ],
+)
+def test_parse_decimal_handles_currencies_commas_and_negative_values(value, expected):
+    assert _parse_decimal(value) == expected
+
+
+@pytest.mark.parametrize("value", ["", "-", "N/A", "not a number", "NaN", "Infinity"])
+def test_parse_decimal_returns_none_for_missing_or_non_finite_values(value):
+    assert _parse_decimal(value) is None
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("Scheme Name", "scheme_name"),
+        ("Closing Balance (Units)", "units"),
+        ("Valuation (₹)", "statement_value"),
+        ("AMFI Scheme Code", "scheme_code"),
+        ("ISIN", "isin"),
+        ("Transaction Amount", None),
+    ],
+)
+def test_header_kind_maps_cas_columns(header, expected):
+    assert _header_kind(header) == expected
+
+
+def test_table_header_combines_wrapped_cdsl_column_labels():
+    table = [
+        ["Scheme", "ISIN", "", "Closing Balance", "Valuation"],
+        ["Name", "", "", "(Units)", "(₹)"],
+        ["Sample Fund", "INF200K01RP8", "", "12.5", "1000.00"],
+    ]
+
+    assert _table_header(table) == (
+        1,
+        {"scheme_name": 0, "isin": 1, "units": 3, "statement_value": 4},
+    )
+
+
+def test_table_header_rejects_transaction_amount_instead_of_valuation():
+    table = [["Scheme Name", "Units", "Transaction Amount"], ["Fund", "2", "100"]]
+
+    assert _table_header(table) is None
 
 
 def test_prefers_portfolio_date_over_generic_nav_and_generation_dates():
