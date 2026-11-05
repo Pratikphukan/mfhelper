@@ -16,3 +16,4 @@
 - [x] Make updates atomic and repeated imports idempotent; preserve the previous snapshot on parse/commit failure.
 - [x] Keep the holdings cache out of the daily workflow and public Pages output in this first phase.
 - [x] Verify date selection and holdings-column extraction with synthetic fixtures without touching production Google Sheets or live state.
+- [x] Install Codespaces importer dependencies in the GitHub Actions test workflow.
