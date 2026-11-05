@@ -7,15 +7,13 @@ columns. It never guesses from transaction amounts or partial rows.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 import re
 from typing import Iterable
-
-import pdfplumber
-from pypdf import PdfReader
 
 
 class CasImportError(ValueError):
@@ -43,11 +41,33 @@ _DATE_TOKEN = (
     r"\d{1,2}[-/ .][A-Za-z]{3,9}[-/ .]\d{2,4}|"
     r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4})"
 )
-_STATEMENT_DATE_RE = re.compile(
-    rf"(?:statement\s*(?:date|as\s+on|as\s+of)|"
-    rf"portfolio\s+as\s+on|holdings?\s+as\s+on|"
-    rf"valuation\s+as\s+on|as\s+on|as\s+of)"
-    rf"\s*[:\-]?\s*({_DATE_TOKEN})",
+_EXPLICIT_DATE_PATTERNS = (
+    (
+        4,
+        re.compile(
+            rf"\b(?:portfolio(?:\s+(?:value|valuation))?|holdings?)"
+            rf"\s+as\s+(?:on|of)\s*[:\-]?\s*({_DATE_TOKEN})",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        3,
+        re.compile(
+            rf"\b(?:statement\s*(?:date|as\s+on|as\s+of)|date\s+of\s+statement)"
+            rf"\s*[:\-]?\s*({_DATE_TOKEN})",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        2,
+        re.compile(
+            rf"\bvaluation\s+as\s+(?:on|of)\s*[:\-]?\s*({_DATE_TOKEN})",
+            re.IGNORECASE,
+        ),
+    ),
+)
+_GENERIC_AS_OF_DATE_RE = re.compile(
+    rf"\b(?:as\s+on|as\s+of)\s*[:\-]?\s*({_DATE_TOKEN})",
     re.IGNORECASE,
 )
 _ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{10}$", re.IGNORECASE)
@@ -68,6 +88,12 @@ def parse_cdsl_cas(pdf_bytes: bytes, pan: str) -> ParsedCas:
         raise CasImportError("The PDF is too large to import (maximum 25 MB).")
 
     secret = validate_pan(pan)
+    try:
+        import pdfplumber
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise CasImportError("The PDF import dependencies are not installed in this Codespace.") from exc
+
     stream = BytesIO(pdf_bytes)
     try:
         reader = PdfReader(stream, strict=False)
@@ -114,24 +140,50 @@ def parse_cdsl_cas(pdf_bytes: bytes, pan: str) -> ParsedCas:
 
 
 def _find_statement_date(text: str) -> date:
-    matches: list[date] = []
-    for match in _STATEMENT_DATE_RE.finditer(text):
+    explicit: list[tuple[int, date]] = []
+    for priority, pattern in _EXPLICIT_DATE_PATTERNS:
+        for match in pattern.finditer(text):
+            try:
+                explicit.append((priority, _parse_date(match.group(1))))
+            except ValueError:
+                continue
+
+    if explicit:
+        highest_priority = max(priority for priority, _ in explicit)
+        selected = [
+            parsed_date
+            for priority, parsed_date in explicit
+            if priority == highest_priority
+        ]
+        unique_dates = set(selected)
+        if len(unique_dates) != 1:
+            raise CasImportError(
+                "The PDF contains conflicting labeled statement dates. No holdings were saved."
+            )
+        return selected[0]
+
+    # Some layouts expose only generic "as on/as of" labels. Prefer the date
+    # repeated most often (typically the portfolio as-of date); break ties by
+    # the first occurrence in document order. These generic matches are only
+    # considered when there is no labeled statement/portfolio date.
+    generic: list[tuple[int, date]] = []
+    for match in _GENERIC_AS_OF_DATE_RE.finditer(text):
         try:
-            matches.append(_parse_date(match.group(1)))
+            generic.append((match.start(), _parse_date(match.group(1))))
         except ValueError:
             continue
-    if not matches:
+    if not generic:
         raise CasImportError(
             "The statement date was not recognized. No holdings were saved."
         )
-    # CAS headers may repeat the same date on each page. Conflicting explicit
-    # statement dates are ambiguous, so do not choose one silently.
-    unique_dates = set(matches)
-    if len(unique_dates) != 1:
-        raise CasImportError(
-            "The PDF contains conflicting statement dates. No holdings were saved."
-        )
-    return matches[0]
+    frequencies = Counter(parsed_date for _, parsed_date in generic)
+    most_common = max(frequencies.values())
+    frequent_dates = {
+        parsed_date
+        for parsed_date, count in frequencies.items()
+        if count == most_common
+    }
+    return next(parsed_date for _, parsed_date in generic if parsed_date in frequent_dates)
 
 
 def _parse_date(value: str) -> date:

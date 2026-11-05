@@ -9,6 +9,7 @@
 - [ ] Inspect the original password-protected CDSL CAS in the Codespace and confirm its parseable layout; the provided FireShot capture is only a visual reference.
 - [x] Build the private upload page and Codespace processing flow.
 - [x] Parse and validate fund identity, units, statement values, and statement date; fail safely when required fields are missing.
+- [x] Prefer labeled portfolio/statement dates over generic NAV dates and cover date-selection precedence with regression tests.
 - [x] Prompt for PAN in the import page and avoid persisting or logging it.
 - [x] Save only the minimal holdings snapshot in that user's private repository; close and discard the uploaded file after processing.
 - [x] Make updates atomic and repeated imports idempotent; preserve the previous snapshot on parse/commit failure.
