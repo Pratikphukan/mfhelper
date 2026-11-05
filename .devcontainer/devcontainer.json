@@ -1,0 +1,17 @@
+{
+  "name": "MFHelper private holdings importer",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "python -m pip install -r requirements-codespaces.txt && gh auth setup-git",
+  "postStartCommand": "bash .devcontainer/start-holdings-import.sh",
+  "forwardPorts": [8765],
+  "portsAttributes": {
+    "8765": {
+      "label": "MFHelper holdings import",
+      "onAutoForward": "openBrowser",
+      "visibility": "private"
+    }
+  }
+}

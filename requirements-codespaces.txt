@@ -1,0 +1,6 @@
+# Dependencies for the private Codespaces CAS importer.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+python-multipart>=0.0.20,<1
+pdfplumber>=0.11,<1
+pypdf>=5,<7

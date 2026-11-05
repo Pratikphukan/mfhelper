@@ -91,6 +91,17 @@ The column layout is **append-only** -- safe to add or remove funds without losi
 
 For a per-user private GitHub Actions setup, follow the [Private copy setup guide](docs/SELF_HOSTED_SETUP.md). It covers creating a private repository from this template, adding your funds and credentials, and enabling the daily workflow.
 
+### Import a CDSL holdings statement (private Codespace)
+
+This optional importer processes a CDSL CAS PDF in a Codespace created from your own **private** MFHelper repository. It saves only the extracted holdings snapshot to `data/private_holdings.json`; it does not retain or commit the PDF or PAN. The snapshot is a regular file in your private repository, so anyone with repository access can read it. Git history also keeps older versions of the snapshot.
+
+1. Push MFHelper to a private GitHub repository and open that repository in a Codespace.
+2. Wait for the Codespace setup to finish. It installs the importer and opens a privately forwarded browser page on port `8765`.
+3. Select the original CDSL CAS PDF and enter the first or sole account holder's PAN as its password.
+4. On a successful import, the Codespace commits and pushes the extracted snapshot to `data/private_holdings.json`. Stop the Codespace when finished to avoid using Codespaces quota.
+
+The importer checks that it is running in a Codespace for a private repository before processing the upload. The forwarded port must remain **Private**. If it cannot recognize the statement date or holdings table, it stops and leaves the existing snapshot unchanged. This first version does not add the snapshot to the public dashboard or daily workflow.
+
 ### 1. Install dependencies
 
 ```bash
