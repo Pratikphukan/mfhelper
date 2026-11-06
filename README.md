@@ -91,6 +91,12 @@ The column layout is **append-only** -- safe to add or remove funds without losi
 
 For a per-user private GitHub Actions setup, follow the [Private copy setup guide](docs/SELF_HOSTED_SETUP.md). It covers creating a private repository from this template, adding your funds and credentials, and enabling the daily workflow.
 
+### Import a CDSL holdings statement (private Vercel project)
+
+To import a CDSL CAS from your own Vercel account, deploy MFHelper's importer as a Vercel project. You sign in with GitHub OAuth (your login only), the browser uploads the PDF directly to your **private** Vercel Blob store, the Python function parses it in memory with your PAN, and only the latest holdings snapshot (`holdings/current.json`) is kept. The temporary PDF is deleted after every import, successful or not; the PAN is never stored. The snapshot is not yet used by the daily workflow or public dashboard.
+
+Follow the [Vercel setup guide](deploy/vercel/README.md). It covers the private Blob store, OAuth app, environment variables, a synthetic-PDF check (`scripts/make_synthetic_cas.py`), and data deletion. Vercel Services (used to run the Python and Node parts together) is currently Beta.
+
 ### Import a CDSL holdings statement (private OCI worker)
 
 To import a CDSL CAS without creating a private GitHub repository, run the importer in your own OCI Compute account. MFHelper authenticates you with GitHub OAuth, processes the PDF on the VM, and saves only the latest holdings snapshot in your private OCI Object Storage bucket. The PDF and PAN are temporary; the holdings snapshot is not yet used by the daily workflow or public dashboard.

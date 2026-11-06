@@ -25,7 +25,22 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-codespaces.txt
+          pip install -r requirements.txt -r requirements-codespaces.txt httpx
 
-      - name: Run tests
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: deploy/vercel/upload-token/package-lock.json
+
+      - name: Install upload-token service dependencies
+        working-directory: deploy/vercel/upload-token
+        run: npm ci
+
+      - name: Run Python tests
         run: pytest tests/ -v
+
+      - name: Run upload-token service tests
+        working-directory: deploy/vercel/upload-token
+        run: npm test

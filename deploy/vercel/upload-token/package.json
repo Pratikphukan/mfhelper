@@ -1,0 +1,17 @@
+{
+  "name": "mfhelper-upload-token",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Issues presigned private Vercel Blob upload URLs for MFHelper's CAS importer.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.2",
+    "express": "^5.3.0"
+  }
+}
