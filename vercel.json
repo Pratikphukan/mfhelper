@@ -1,0 +1,24 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": "deploy/vercel/web",
+      "entrypoint": "main:app",
+      "buildCommand": "python3 vendor.py",
+      "functions": {
+        "main.py": {
+          "maxDuration": 120,
+          "memory": 1024
+        }
+      }
+    },
+    "upload_token": {
+      "root": "deploy/vercel/upload-token",
+      "entrypoint": "index.js"
+    }
+  },
+  "rewrites": [
+    { "source": "/upload-token/(.*)", "destination": { "service": "upload_token" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
+  ]
+}
