@@ -14,7 +14,7 @@ test('claims the signed nonce at a private fixed path without overwrite', async 
 
   assert.equal(writes.length, 1);
   assert.equal(writes[0].path, `tmp/used-tickets/${NONCE}.json`);
-  assert.equal(writes[0].body, 'used');
+  assert.equal(writes[0].body, '{"used":true}');
   assert.equal(writes[0].options.access, 'private');
   assert.equal(writes[0].options.addRandomSuffix, false);
   assert.equal(writes[0].options.allowOverwrite, false);
