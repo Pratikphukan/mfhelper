@@ -72,7 +72,7 @@ After the import, confirm in the Vercel Blob browser that `holdings/current.json
 
 - Only the configured GitHub login can obtain a ticket. The Node service holds no session, GitHub secret, or parser; it verifies the HMAC-signed ticket, claims its nonce once in a private Blob marker, and mints a URL for a server-chosen `tmp/<random>.pdf` path.
 - The upload URL is limited to `application/pdf`, 25 MB, one private path, and 5 minutes. A ticket lasts 2 minutes and can be claimed once. The temporary claim marker is removed by the next stale-object cleanup after 15 minutes.
-- The page sends a strict Content-Security-Policy (nonce-based inline script, `connect-src` limited to the app and `*.blob.vercel-storage.com`) and loads no third-party scripts.
+- The page sends a strict Content-Security-Policy (nonce-based inline script, `connect-src` limited to the app, `https://vercel.com/api/blob/`, and `*.blob.vercel-storage.com`) and loads no third-party scripts.
 - Vercel is a third party that handles the encrypted PDF and PAN in transit. Do not add request-body logging or log drains for this project.
 - The Python Blob SDK has no cache-bypass read; after a replace, the previous snapshot can be served for up to about 60 seconds. This only matters if two imports happen within a minute.
 - Rotate `MFHELPER_SESSION_SECRET` / `MFHELPER_TICKET_SECRET` to sign out all sessions and invalidate tickets immediately.

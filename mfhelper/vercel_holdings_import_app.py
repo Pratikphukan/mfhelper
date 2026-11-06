@@ -426,7 +426,7 @@ def _page_html(content: str, *, status_code: int = 200, script: str = "") -> HTM
     response.headers["Content-Security-Policy"] = (
         "default-src 'none'; "
         f"script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
-        "connect-src 'self' https://*.blob.vercel-storage.com; "
+        "connect-src 'self' https://vercel.com/api/blob/ https://*.blob.vercel-storage.com; "
         "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
     )
     return response

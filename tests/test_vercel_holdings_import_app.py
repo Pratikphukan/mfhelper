@@ -123,7 +123,7 @@ def test_signed_in_page_has_nonce_csp_and_no_third_party_scripts(monkeypatch):
 
     assert f'<script nonce="{nonce}">' in page.text
     assert "unsafe-inline" not in csp and "unsafe-eval" not in csp
-    assert "connect-src 'self' https://*.blob.vercel-storage.com" in csp
+    assert "connect-src 'self' https://vercel.com/api/blob/ https://*.blob.vercel-storage.com" in csp
     assert "frame-ancestors 'none'" in csp
     assert "src=" not in page.text.split("<script")[1].split(">")[0]  # inline script only
     assert page.headers["cache-control"] == "no-store"
