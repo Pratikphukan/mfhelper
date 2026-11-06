@@ -33,6 +33,7 @@ export function verifyTicket(secret, ticket, nowMs = Date.now()) {
     throw invalid();
   }
   if (payload === null || typeof payload !== 'object' || payload.aud !== AUDIENCE) throw invalid();
+  if (typeof payload.nonce !== 'string' || !/^[A-Za-z0-9_-]{16,64}$/.test(payload.nonce)) throw invalid();
   if (!Number.isInteger(payload.exp) || nowMs / 1000 >= payload.exp) {
     throw new TicketError('The upload ticket has expired. Reload the page and try again.');
   }

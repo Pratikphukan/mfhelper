@@ -12,10 +12,13 @@ export async function createPresign({
   secret,
   issueSignedToken,
   presignUrl,
+  claimTicket,
   now = Date.now,
   randomId = randomUUID,
 }) {
   const payload = verifyTicket(secret, ticket, now());
+  if (typeof claimTicket !== 'function') throw new Error('Upload ticket claim is not configured.');
+  await claimTicket(payload.nonce);
 
   // The pathname is always chosen here; nothing from the browser selects it.
   const pathname = `${TEMP_PREFIX}${randomId()}.pdf`;

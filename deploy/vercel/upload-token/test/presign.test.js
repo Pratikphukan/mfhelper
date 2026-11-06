@@ -12,7 +12,7 @@ function ticket(overrides = {}) {
     aud: AUDIENCE,
     login: 'owner',
     exp: NOW_MS / 1000 + 60,
-    nonce: 'n',
+    nonce: 'nonce_for_testing_1234',
     max_bytes: MAX_UPLOAD_BYTES,
     ...overrides,
   };
@@ -22,14 +22,16 @@ function ticket(overrides = {}) {
 }
 
 function fakes() {
-  const calls = { issue: [], presign: [] };
+  const calls = { claim: [], issue: [], presign: [], order: [] };
   return {
     calls,
     issueSignedToken: async (options) => {
+      calls.order.push('issue');
       calls.issue.push(options);
       return { delegationToken: 'd', clientSigningToken: 'c' };
     },
     presignUrl: async (token, options) => {
+      calls.order.push('presign');
       calls.presign.push({ token, options });
       return { presignedUrl: `https://store.private.blob.vercel-storage.com/${options.pathname}?sig=x` };
     },
@@ -43,6 +45,7 @@ test('mints a private, single-file, PDF-only, size-limited PUT URL', async () =>
     secret: SECRET,
     issueSignedToken: f.issueSignedToken,
     presignUrl: f.presignUrl,
+    claimTicket: async (nonce) => { f.calls.order.push('claim'); f.calls.claim.push(nonce); },
     now: () => NOW_MS,
     randomId: () => 'abc-123',
   });
@@ -50,6 +53,8 @@ test('mints a private, single-file, PDF-only, size-limited PUT URL', async () =>
   assert.equal(result.pathname, 'tmp/abc-123.pdf');
   assert.match(result.url, /tmp\/abc-123\.pdf/);
   assert.equal(result.max_bytes, MAX_UPLOAD_BYTES);
+  assert.deepEqual(f.calls.claim, ['nonce_for_testing_1234']);
+  assert.deepEqual(f.calls.order, ['claim', 'issue', 'presign']);
 
   const [issued] = f.calls.issue;
   assert.deepEqual(issued.operations, ['put']);
@@ -90,7 +95,25 @@ test('uses a smaller ticket limit but never a larger one', async () => {
     secret: SECRET,
     issueSignedToken: f.issueSignedToken,
     presignUrl: f.presignUrl,
+    claimTicket: async () => {},
     now: () => NOW_MS,
   });
   assert.equal(result.max_bytes, 1024);
+});
+
+test('does not mint an upload URL when claiming the ticket fails', async () => {
+  const f = fakes();
+  await assert.rejects(
+    createPresign({
+      ticket: ticket(),
+      secret: SECRET,
+      issueSignedToken: f.issueSignedToken,
+      presignUrl: f.presignUrl,
+      claimTicket: async () => { throw new TicketError('already used'); },
+      now: () => NOW_MS,
+    }),
+    TicketError,
+  );
+  assert.equal(f.calls.issue.length, 0);
+  assert.equal(f.calls.presign.length, 0);
 });

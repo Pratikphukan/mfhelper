@@ -23,6 +23,7 @@ ACCESS = "private"
 SNAPSHOT_PATH = "holdings/current.json"
 TEMP_PREFIX = "tmp/"
 TEMP_PATHNAME_RE = re.compile(r"^tmp/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.pdf$")
+CLAIM_PATHNAME_RE = re.compile(r"^tmp/used-tickets/[A-Za-z0-9_-]{16,64}\.json$")
 STALE_AFTER = timedelta(minutes=15)
 # Vercel Blob's minimum cache lifetime; limits how long a stale snapshot can be read.
 SNAPSHOT_CACHE_SECONDS = 60
@@ -75,12 +76,23 @@ class VercelHoldingsStore:
         except Exception:
             return False
 
+    async def delete_claim_marker(self, pathname: object) -> bool:
+        """Best-effort delete of a temporary upload-ticket claim marker."""
+        if not isinstance(pathname, str) or not CLAIM_PATHNAME_RE.fullmatch(pathname):
+            return False
+        try:
+            await self.blob.delete_blob(pathname)
+            return True
+        except Exception:
+            return False
+
     async def cleanup_stale(self, *, now: datetime | None = None) -> int:
-        """Delete temporary PDFs older than ``STALE_AFTER``. Best effort; never raises."""
+        """Delete stale temporary PDFs and ticket claims. Best effort; never raises."""
         cutoff = (now or datetime.now(timezone.utc)) - STALE_AFTER
         removed = 0
         try:
-            stale: list[str] = []
+            stale_pdfs: list[str] = []
+            stale_claims: list[str] = []
             async for item in self.blob.query_blobs(prefix=TEMP_PREFIX):
                 uploaded_at = getattr(item, "uploaded_at", None)
                 pathname = getattr(item, "pathname", None)
@@ -88,10 +100,17 @@ class VercelHoldingsStore:
                     continue
                 if uploaded_at.tzinfo is None:
                     uploaded_at = uploaded_at.replace(tzinfo=timezone.utc)
-                if uploaded_at < cutoff:
-                    stale.append(pathname)
-            for pathname in stale:
+                if uploaded_at >= cutoff:
+                    continue
+                if TEMP_PATHNAME_RE.fullmatch(pathname):
+                    stale_pdfs.append(pathname)
+                elif CLAIM_PATHNAME_RE.fullmatch(pathname):
+                    stale_claims.append(pathname)
+            for pathname in stale_pdfs:
                 if await self.delete_temp(pathname):
+                    removed += 1
+            for pathname in stale_claims:
+                if await self.delete_claim_marker(pathname):
                     removed += 1
         except Exception:
             return removed

@@ -88,7 +88,7 @@ Refinement found while verifying the docs: instead of the `handleUploadPresigned
 
 Known limitations accepted with this approach:
 - The Python Blob SDK has no cache-bypass read. After an overwrite, `holdings/current.json` may be read stale for up to about 60 s. This only affects the older-statement/idempotency guard if two imports happen within a minute. The snapshot is stored with `cache_control_max_age=60` (the minimum).
-- Tickets are not single-use; they expire after 120 s and only authorize one scoped PDF upload.
+- Tickets expire after 120 s and are consumed once by a private Blob claim keyed by their signed nonce. The 15-minute stale-object cleanup removes expired claim markers.
 - The OCI code is **not** removed in this change set. Per Decision 5A it is removed after one successful Vercel import (tracked in `tasks.md`).
 - Python packaging of the shared `mfhelper/` modules for the Vercel service root must be verified on a preview deployment (see `deploy/vercel/README.md`).
 
@@ -187,3 +187,8 @@ Vercel Functions reject bodies above about 4.5 MB; today's limit is 25 MB.
 - Add storage-adapter tests with a fake client, mirroring `test_oci_holdings_cache.py`.
 - Adapt app tests to the chosen entrypoint. Check: unauthenticated upload rejected before parsing, wrong GitHub login rejected, oversize rejected, CSRF token required.
 - Dry-run with a synthetic encrypted PDF against a Vercel preview deployment and a throwaway store. Never use the real statement or production data during development.
+
+
+### One-time upload ticket claims
+
+The initial upload-token service allowed a valid ticket to be replayed to mint more than one presigned URL. The service now creates a private Blob claim at `tmp/used-tickets/<nonce>.json` with overwrite disabled before issuing the URL. The signed nonce is format-validated and cannot be supplied separately by the browser. A repeated or concurrent request for the same ticket sees the existing claim and is rejected. If Blob claim storage fails, the service does not issue a URL. If URL signing fails after the claim, the user requests a fresh ticket; the claim is not rolled back. The existing 15-minute temporary-object cleanup removes claim markers after the two-minute ticket lifetime.

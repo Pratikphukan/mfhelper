@@ -17,7 +17,7 @@ function payload(overrides = {}) {
     aud: AUDIENCE,
     login: 'owner',
     exp: NOW_MS / 1000 + 60,
-    nonce: 'n',
+    nonce: 'nonce_for_testing_1234',
     max_bytes: MAX_UPLOAD_BYTES,
     ...overrides,
   };
@@ -61,4 +61,10 @@ test('verifies a ticket passed on the command line (cross-language check)', { sk
   const result = verifyTicket(process.env.MFHELPER_TEST_SECRET, process.env.MFHELPER_TEST_TICKET);
   assert.equal(result.aud, AUDIENCE);
   assert.equal(result.login, 'mfhelper-owner');
+});
+
+test('rejects missing or path-unsafe nonces', () => {
+  for (const nonce of [undefined, '', '../file', 'short', 'x'.repeat(65)]) {
+    assert.throws(() => verifyTicket(SECRET, sign(payload({ nonce })), NOW_MS), TicketError);
+  }
 });

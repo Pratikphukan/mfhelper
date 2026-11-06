@@ -14,7 +14,7 @@ Vercel Services is a Beta feature. Routing is defined in the repository's `verce
 ```text
 Browser (signed in with GitHub)
   1. POST /upload-ticket            -> Python checks the allowlisted login + CSRF token, returns a 2-minute signed ticket
-  2. POST /upload-token/presign     -> Node verifies the ticket, returns a presigned PUT URL for tmp/<random>.pdf
+  2. POST /upload-token/presign     -> Node verifies and claims the ticket nonce once, then returns a presigned PUT URL for tmp/<random>.pdf
   3. PUT <presigned URL>            -> the PDF goes straight to your private Blob store (PDF only, max 25 MB, 5 minutes)
   4. POST /import {pathname, pan}   -> Python reads the PDF, parses it in memory, saves the snapshot, DELETES the PDF
 ```
@@ -70,8 +70,8 @@ After the import, confirm in the Vercel Blob browser that `holdings/current.json
 
 ## Access and security notes
 
-- Only the configured GitHub login can obtain a ticket. The Node service holds no session, GitHub secret, or parser; it only verifies the HMAC-signed ticket and mints a URL for a server-chosen `tmp/<random>.pdf` path.
-- The upload URL is limited to `application/pdf`, 25 MB, one private path, and 5 minutes. A ticket lasts 2 minutes but is not single-use.
+- Only the configured GitHub login can obtain a ticket. The Node service holds no session, GitHub secret, or parser; it verifies the HMAC-signed ticket, claims its nonce once in a private Blob marker, and mints a URL for a server-chosen `tmp/<random>.pdf` path.
+- The upload URL is limited to `application/pdf`, 25 MB, one private path, and 5 minutes. A ticket lasts 2 minutes and can be claimed once. The temporary claim marker is removed by the next stale-object cleanup after 15 minutes.
 - The page sends a strict Content-Security-Policy (nonce-based inline script, `connect-src` limited to the app and `*.blob.vercel-storage.com`) and loads no third-party scripts.
 - Vercel is a third party that handles the encrypted PDF and PAN in transit. Do not add request-body logging or log drains for this project.
 - The Python Blob SDK has no cache-bypass read; after a replace, the previous snapshot can be served for up to about 60 seconds. This only matters if two imports happen within a minute.

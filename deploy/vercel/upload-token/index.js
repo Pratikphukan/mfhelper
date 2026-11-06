@@ -2,8 +2,9 @@
 // presigned, private, single-file PUT URL. It holds no session, GitHub secret,
 // or parser code. Blob access uses Vercel OIDC (BLOB_STORE_ID), not a static token.
 import express from 'express';
-import { issueSignedToken, presignUrl } from '@vercel/blob';
+import { head, issueSignedToken, presignUrl, put } from '@vercel/blob';
 import { createPresign } from './presign.js';
+import { claimTicketNonce } from './claim.js';
 import { TicketError } from './ticket.js';
 
 const app = express();
@@ -26,6 +27,7 @@ app.post('/upload-token/presign', async (req, res) => {
       secret: process.env.MFHELPER_TICKET_SECRET || '',
       issueSignedToken,
       presignUrl,
+      claimTicket: (nonce) => claimTicketNonce(nonce, { putBlob: put, headBlob: head }),
     });
     res.status(200).json(result);
   } catch (error) {

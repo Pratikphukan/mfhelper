@@ -13,8 +13,8 @@
 ## Implementation
 
 - [x] `mfhelper/upload_ticket.py`: HMAC-signed 120 s ticket (audience, login, nonce, 25 MB limit).
-- [x] `deploy/vercel/upload-token/`: Node service (`ticket.js`, `presign.js`, `index.js`) that verifies the ticket and returns a presigned private PUT URL for a server-chosen `tmp/<uuid>.pdf`.
-- [x] `mfhelper/vercel_holdings_cache.py`: private Blob adapter (temp PDF read/delete, stale cleanup, single `holdings/current.json` with older-statement and idempotency guards).
+- [x] `deploy/vercel/upload-token/`: Node service (`ticket.js`, `presign.js`, `index.js`, `claim.js`) that verifies the ticket, consumes its nonce once in a private Blob claim, and returns a presigned private PUT URL for a server-chosen `tmp/<uuid>.pdf`.
+- [x] `mfhelper/vercel_holdings_cache.py`: private Blob adapter (temp PDF read/delete, stale PDF and ticket-claim cleanup, single `holdings/current.json` with older-statement and idempotency guards).
 - [x] `mfhelper/vercel_holdings_import_app.py`: GitHub OAuth allowlist, CSRF, `/upload-ticket`, `/import`, nonce CSP, no third-party scripts.
 - [x] `vercel.json`, `deploy/vercel/web/` (entrypoint, light `requirements.txt`, `vendor.py`), `.gitignore`.
 - [x] Python tests (ticket incl. Python-to-Node cross check, storage, app incl. real synthetic encrypted PDF, packaging) and Node tests.

@@ -186,6 +186,7 @@ def test_delete_temp_never_raises_and_refuses_non_temp_paths():
 
     assert run(store.delete_temp("tmp/a.pdf")) is True
     assert run(store.delete_temp(SNAPSHOT_PATH)) is False
+    assert run(store.delete_temp("tmp/used-tickets/nonce_for_testing_1234.json")) is False
     assert SNAPSHOT_PATH in blob.objects
 
     async def broken(_pathname):
@@ -195,18 +196,35 @@ def test_delete_temp_never_raises_and_refuses_non_temp_paths():
     assert run(store.delete_temp("tmp/a.pdf")) is False
 
 
-def test_cleanup_removes_only_stale_temp_pdfs():
+def test_cleanup_removes_only_stale_temp_pdfs_and_ticket_claims():
     now = datetime(2026, 11, 6, 12, 0, tzinfo=timezone.utc)
+    stale_claim = "tmp/used-tickets/nonce_for_testing_1234.json"
+    recent_claim = "tmp/used-tickets/recent_nonce_123456.json"
     blob = FakeBlob()
-    blob.objects.update({"tmp/old.pdf": b"x", "tmp/new.pdf": b"x", SNAPSHOT_PATH: b"{}"})
+    blob.objects.update({
+        "tmp/old.pdf": b"x",
+        "tmp/new.pdf": b"x",
+        stale_claim: b"used",
+        recent_claim: b"used",
+        "tmp/used-tickets/invalid!.json": b"keep",
+        SNAPSHOT_PATH: b"{}",
+    })
     blob.uploaded_at["tmp/old.pdf"] = now - timedelta(minutes=16)
     blob.uploaded_at["tmp/new.pdf"] = now - timedelta(minutes=2)
+    blob.uploaded_at[stale_claim] = now - timedelta(minutes=16)
+    blob.uploaded_at[recent_claim] = now - timedelta(minutes=2)
+    blob.uploaded_at["tmp/used-tickets/invalid!.json"] = now - timedelta(hours=1)
     store = VercelHoldingsStore(blob)
 
     removed = run(store.cleanup_stale(now=now))
 
-    assert removed == 1
-    assert set(blob.objects) == {"tmp/new.pdf", SNAPSHOT_PATH}
+    assert removed == 2
+    assert set(blob.objects) == {
+        "tmp/new.pdf",
+        recent_claim,
+        "tmp/used-tickets/invalid!.json",
+        SNAPSHOT_PATH,
+    }
 
 
 def test_cleanup_is_best_effort_when_listing_fails():
