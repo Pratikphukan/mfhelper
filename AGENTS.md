@@ -14,3 +14,12 @@
 - Never write to or modify production Google Sheets or live state files during testing.
 - Always use the `--dev` flag for verification runs.
 - Run `pytest tests/` and verify all tests pass before completing any task.
+
+## 4. Communication Style
+- Use simple, clear, everyday English. Keep sentences short and direct.
+- Start with the direct answer. Prefer short paragraphs and bullets; use tables when comparing options.
+- Explain technical terms in plain language. Explain steps in order and why they are needed.
+- Do not assume the user already understands a concept because it is technical. Use practical examples when they help.
+- Keep technical details accurate. Simplify the explanation, not the technical meaning.
+- Avoid unnecessary jargon, repetition, long introductions, and conclusions.
+- For follow-up questions, answer the specific question without restarting the full explanation.
