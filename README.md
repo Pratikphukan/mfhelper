@@ -303,7 +303,8 @@ With `regime.record_to_sheet: true`, each daily run writes one row to a tab call
 | Notes | e.g. `no ^INDIAVIX data` when something was missing |
 
 * It is written every day the switch is on, whether or not any alert fires, and no email is involved.
-* A re-run on the same date **replaces** that date's row. Other rows are never rewritten and nothing is trimmed.
+* A re-run on the same date **replaces** that date's row. Other rows are never rewritten.
+* Rows older than `regime.sheet_keep_days` (default **180** days) are removed from this tab after each write. The header row, today's row, and any row whose first cell is not a date are never removed, and no other tab is touched.
 * If market data is missing, the row is still written (Regime `NEUTRAL`, blank numbers, the reason in Notes).
 * If the tab already exists with a different header, nothing is written and a warning is logged, so your own data is never overwritten.
 * A failed write is only a warning: it cannot stop the NAV row, the alerts, or the email.

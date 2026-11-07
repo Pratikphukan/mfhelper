@@ -63,7 +63,7 @@ A test runs the same inputs with the feature off and on, in every regime, and as
 | Where | A new tab **"Market Regime"** in the same spreadsheet (`settings.google_sheet.spreadsheet_id`). The Daily NAV tab and its column layout are never touched. |
 | Why not the Daily NAV tab | It is one column group per fund with strict layout guards (`sheet_columns.json`, migrations, 30-row trim). Market data is one set per day, not per fund. Every other feature already uses its own tab (analytics, gold ETF, overlap, historical, portfolio map). |
 | Rows | One row per run date. A re-run on the same date **replaces** that date's row (matched on the date part of column A). |
-| Retention | Keep all rows. No trimming (about one row a day). |
+| Retention | ~~Keep all rows~~ superseded by Amendment 4: keep the last 180 days. |
 | When written | Every daily run while `regime.enable` is true, whether or not any alert fires. Nothing is written when the regime is disabled. |
 | Dev runs | `--dev` writes to **"Market Regime (Dev)"**, matching the NAV sheet's "(Dev)" tab. |
 | Failure | A failed sheet write is logged as a warning and the run continues. It cannot block the NAV row, the alerts, or the email. |
@@ -111,6 +111,16 @@ Changes to Amendment 2 and the earlier design:
 | Tab name | Configurable with `regime.sheet_name` (default "Market Regime"); " (Dev)" is appended under `--dev`. |
 | Headers | SMA columns are headed "Short SMA" / "Long SMA" and the VIX column "VIX (smoothed)", because the windows (50 / 200 / 5 days) are configurable and the header guard needs fixed text. |
 | Rollout | Turn on `record_to_sheet` now. After about a month of rows, review how often each regime fired and decide whether to turn on `enable` (the advice-on-alerts code is already built and tested, and stays off). |
+
+## Amendment 4: keep the last 180 days in the Market Regime tab (APPROVED by the user on 2026-11-07, implemented)
+
+**User decision:** "Lets do a limit of 180 days." This replaces "keep all rows, no trimming" from Amendment 2.
+
+- Setting: `regime.sheet_keep_days` (whole number >= 1, default 180).
+- After each write, a row is removed when its date is `keep_days` or more days before the run date (a row 179 days old stays, 180 days old goes). Consecutive old rows are deleted in one call, bottom-up.
+- Never removed: the header row, today's row, rows whose first cell is not an ISO date, and anything on any other tab. No trimming happens if the header check refuses the tab.
+- A failed trim is a warning only; the day's row is already written.
+- Cost: the extra column read and delete calls are the same pattern the Daily NAV tab already uses.
 
 ## 1. Where this fits in the current code
 

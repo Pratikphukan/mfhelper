@@ -227,6 +227,7 @@ class RegimeSettings:
     enable: bool = False
     record_to_sheet: bool = False
     sheet_name: str = "Market Regime"
+    sheet_keep_days: int = 180       # rows older than this many days are removed from that tab
 
     # Regime classification (NIFTY 500 + India VIX).
     index_ticker: str = "^CRSLDX"
@@ -384,6 +385,7 @@ def _parse_regime(raw: dict, source: str) -> RegimeSettings:
         enable=enable,
         record_to_sheet=record_to_sheet,
         sheet_name=sheet_name,
+        sheet_keep_days=_whole(raw, "sheet_keep_days", defaults.sheet_keep_days, where),
         index_ticker=index_ticker,
         vix_ticker=vix_ticker,
         vix_low=vix_low,

@@ -7,11 +7,13 @@ the Daily NAV tab and never touches it. Rules:
 * If the tab already has a *different* header, nothing is written (``RegimeSheetError``), so
   someone else's data is never overwritten.
 * A re-run on the same date replaces that date's row; other rows are never rewritten.
-* Rows are never trimmed.
+* After each write, rows whose date is ``keep_days`` or more days older than the run are removed
+  from this tab. The header row and rows whose timestamp is not a date are never removed.
 """
 
 from __future__ import annotations
 
+from datetime import date
 import logging
 from pathlib import Path
 import time
@@ -27,6 +29,7 @@ REGIME_TAB_DEFAULT = "Market Regime"
 RETRY_ATTEMPTS = 4
 RETRY_BACKOFF_SECONDS = 2.0
 GROW_ROWS = 500
+DEFAULT_KEEP_DAYS = 180
 
 HEADERS = (
     "Run Timestamp (IST)",
@@ -45,6 +48,31 @@ HEADERS = (
 # 0-based column indexes used for number formats.
 PRICE_COLUMNS = (2, 3, 4, 5)  # index close, two SMAs, VIX: 2 decimals
 PE_COLUMN = 6                 # 1 decimal
+
+
+def stale_row_ranges(timestamps: list[str], run_date: date, keep_days: int) -> list[tuple[int, int]]:
+    """1-based inclusive ``(first, last)`` row ranges older than ``keep_days``, oldest first.
+
+    ``timestamps`` is column A including the header (row 1, never returned). Rows whose first
+    word is not an ISO date are left alone.
+    """
+    stale: list[int] = []
+    for index, value in enumerate(timestamps):
+        if index == 0:
+            continue
+        try:
+            row_date = date.fromisoformat(value.split(" ", 1)[0])
+        except ValueError:
+            continue
+        if (run_date - row_date).days >= keep_days:
+            stale.append(index + 1)
+    ranges: list[tuple[int, int]] = []
+    for row in stale:
+        if ranges and ranges[-1][1] == row - 1:
+            ranges[-1] = (ranges[-1][0], row)
+        else:
+            ranges.append((row, row))
+    return ranges
 
 
 class RegimeSheetError(RuntimeError):
@@ -92,7 +120,9 @@ class RegimeSheetWriter:
         worksheet_name: str,
         credentials_path: Path,
         token_path: Path,
+        keep_days: int = DEFAULT_KEEP_DAYS,
     ) -> None:
+        self._keep_days = keep_days
         self._spreadsheet_id = spreadsheet_id
         self._worksheet_name = worksheet_name
         self._credentials_path = credentials_path
@@ -210,4 +240,26 @@ class RegimeSheetWriter:
         )
         log.info("%s %r row %d for %s", "Replaced" if same_day else "Appended", self._worksheet_name,
                  target, run_date)
-        return target
+        return target - self._trim(ws, run_date, target)
+
+    def _trim(self, ws: gspread.Worksheet, run_date: str, target_row: int) -> int:
+        """Remove rows older than ``keep_days``. Returns how many rows above ``target_row`` went away.
+
+        A failure here is logged and ignored: the row for today is already written.
+        """
+        try:
+            timestamps = self._run_with_retry(lambda: ws.col_values(1))
+            ranges = stale_row_ranges(timestamps, date.fromisoformat(run_date), self._keep_days)
+            removed_above = 0
+            for first, last in reversed(ranges):  # bottom-up, so earlier row numbers stay valid
+                self._run_with_retry(lambda f=first, l=last: ws.delete_rows(f, l))
+                if last < target_row:
+                    removed_above += last - first + 1
+            if ranges:
+                total = sum(last - first + 1 for first, last in ranges)
+                log.info("Removed %d row(s) older than %d days from %r", total, self._keep_days,
+                         self._worksheet_name)
+            return removed_above
+        except Exception as exc:
+            log.warning("Could not trim old rows from %r: %s", self._worksheet_name, exc)
+            return 0

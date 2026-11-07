@@ -42,6 +42,7 @@ regime:
   enable: false
   record_to_sheet: false
   sheet_name: "Market Regime"        # tab in your spreadsheet; "(Dev)" is added under --dev
+  sheet_keep_days: 180               # rows older than this are removed from that tab (never the header)
 
   classification:                    # first match wins: BEAR, CORRECTION, UPTREND, else NEUTRAL
     vix_low: 15.0                    # UPTREND: smoothed VIX below this and index above its 50D SMA

@@ -40,3 +40,9 @@
 - [x] `pytest tests/` passes. No real sheet was written (fakes only).
 - [ ] User: turn on `regime.record_to_sheet: true` in the `ALERTS_YAML` secret (and a manual `nifty50_pe` fallback), run once with `--dev` to see the "Market Regime (Dev)" tab, then let it run for about a month.
 - [ ] After a month: review the tab and decide whether to turn on `regime.enable`.
+
+## Amendment 4 (keep the last 180 days) - approved and implemented
+
+- [x] `regime.sheet_keep_days` (default 180) with validation, example config, README.
+- [x] `stale_row_ranges()` + `RegimeSheetWriter._trim()`; header, today's row, non-date rows and other tabs are never removed; trim failure is a warning.
+- [x] Tests: boundary (179 kept / 180 removed), grouping, header safety, non-date rows, today's row with a tiny limit, same-day replace, other tabs untouched, trim failure, config validation, wiring.
