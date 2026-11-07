@@ -52,3 +52,7 @@
 - [x] `RegimeSheetWriter(place_after=...)` inserts a new tab right of the NAV tab; existing tabs are not moved; missing neighbour falls back to the end.
 - [x] `main.py` passes the NAV worksheet name it used (including "(Dev)").
 - [x] Tests: next-to placement, dev placement, last-position, missing neighbour, no neighbour, existing tab not moved, `main.run` passes the right name.
+
+## Follow-up before enabling regime advice
+
+- [ ] Revisit buy-action wording for BEAR conditions that do not meet the CAPITULATION thresholds. Keep the alert visible, but make its action text consistent with the caution note so the email does not say both “buy aggressively” and “this dip may keep falling.” Consider the same consistency for Tier-1 buys during CORRECTION.
