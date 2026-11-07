@@ -31,9 +31,9 @@ email:
   receiver_email: "receiver_email@gmail.com"
 
 # Market regime and valuation context (optional, OFF by default).
-# When enabled, buy alerts are gated by the broad market (NIFTY 500 + India VIX) and sized
-# by the Nifty 50 P/E. Sell / trim alerts are never suppressed. Run `python regime_main.py`
-# to see what the daily run would use today.
+# When enabled, buy alerts get a short note about the broad market (NIFTY 500 + India VIX)
+# and a suggested size from the Nifty 50 P/E. It is advice only: no alert is ever removed or
+# hidden. Run `python regime_main.py` to see what the daily run would use today.
 regime:
   enable: false
 
@@ -41,13 +41,12 @@ regime:
     vix_low: 15.0                    # UPTREND: smoothed VIX below this and index above its 50D SMA
     vix_high: 18.0                   # CORRECTION: smoothed VIX at or above this (no upper cap)
     vix_smoothing_days: 5            # VIX is averaged over this many sessions
-    confirm_days: 3                  # a new regime applies only after holding this many sessions
     short_sma_days: 50
     long_sma_days: 200               # BEAR: index below it and it is lower than slope_lookback_days ago
     slope_lookback_days: 20
     max_data_age_days: 5             # older market data is ignored (regime falls back to NEUTRAL)
 
-  capitulation:                      # BEAR only: the sole buys allowed (both conditions required)
+  capitulation:                      # BEAR only: a buy meeting both is tagged CAPITULATION
     rsi: 25.0
     sma_discount_pct: -12.0
 

@@ -44,7 +44,7 @@ from mfhelper.sheets import NavValue, SheetAppender
 from mfhelper.state import LastNavStore, PrevNav
 from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal, resolve_conflicting_alerts, check_trimming_signal
 from mfhelper.market_regime import banner_text, build_market_context
-from mfhelper.regime_filter import apply_regime_to_buys, check_trimming_for_context
+from mfhelper.regime_filter import annotate_buys, check_trimming_for_context
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -142,7 +142,6 @@ def run(args: argparse.Namespace) -> int:
     if regime_cfg.enable:
         market_context = build_market_context(regime_cfg, cache_dir=DATA_DIR / "market_context")
         log.info("[REGIME] %s", banner_text(market_context))
-    suppressed_signals = []
 
     all_triggered_alerts = []
     all_confluence_signals = []
@@ -256,25 +255,17 @@ def run(args: argparse.Namespace) -> int:
                 rules=alert_settings.rules,
             )
 
-            # Gate and size the buy side by market regime (no-op unless enabled)
+            # Add market-regime advice (notes and suggested size) to the buy side.
+            # Advice only: the same alerts and signals come out as went in.
             if market_context is not None:
-                decision = apply_regime_to_buys(
+                triggered, confluence = annotate_buys(
                     market_context,
                     regime_cfg,
-                    scheme_code=fund.code,
-                    fund_name=display_names[fund.code],
                     rsi=rsi_value,
                     dist_200d_sma=dist_200d_sma_pct,
                     alerts=triggered,
                     confluence=confluence,
                 )
-                triggered, confluence = decision.alerts, decision.confluence
-                if decision.suppressed:
-                    suppressed_signals.append(decision.suppressed)
-                    log.info(
-                        "  [REGIME] Suppressed %s for %s (%s)",
-                        decision.suppressed.label, fund.code, decision.suppressed.reason,
-                    )
 
             if triggered:
                 all_triggered_alerts.extend(triggered)
@@ -376,7 +367,7 @@ def run(args: argparse.Namespace) -> int:
         dispatch_alerts_email(
             resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev,
             trimming_signals=all_trimming_signals,
-            market_context=market_context, suppressed=suppressed_signals,
+            market_context=market_context,
         )
 
     if fallback_codes:

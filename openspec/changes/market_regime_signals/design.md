@@ -23,6 +23,35 @@
 3. **D4 in BEAR also covers the trimming side?** Not specified. Proposed: trimming signals are never suppressed by the regime (only buy signals are gated); only valuation (D7) changes trimming. **[CONFIRM]**
 4. **Valuation modifiers apply independent of regime.** P/E > 24 halves buy multipliers (0.5x) and tightens trims; P/E < 18 multiplies buy multipliers by 1.25. In BEAR, only capitulation signals exist, so the multiplier applies to those. **[CONFIRM]**
 
+## Amendment 1: the regime advises, it never mutes (APPROVED by the user on 2026-11-07, implemented)
+
+The Recorded Answers table above is the original design. Where it conflicts with this amendment (D2, D4, D5), the amendment wins.
+
+**User principle:** "This is a suggestion. It should not have the power to mute the alerts. The user should read and decide whether to follow it."
+
+This replaces D2, D4 and D5 and changes how D1/D6 are shown. Everything else (D3 scope, D7 trim tightening, D8 valuation source, D9 rollout) is unchanged. Tightening trims only adds alerts, so it does not conflict with the principle.
+
+| Topic | Old (approved) | Proposed |
+| --- | --- | --- |
+| Which alerts are sent | Regime hides some buy alerts | **Exactly the same alerts as with the feature off.** The regime never removes one. |
+| Suppressed list | "Suppressed by market regime" email section | Removed. Nothing is suppressed. |
+| Confirmation (D2) | Regime changes after 3 days in a row | Removed. The regime follows each day's market. The `confirm_days` setting and the replay code are deleted. |
+| Bear capitulation (D4) | Replaces Tier 3; other buys hidden | Every buy is still sent. A buy that meets RSI <= 25 **and** 200D discount <= -12% is tagged CAPITULATION. In BEAR, other buys get a warning tag. |
+| Email "only suppressed" rule | No email if all suppressed | Removed. An email is sent whenever the feature-off run would send one. |
+
+### What the user sees instead (labels on each buy alert)
+
+- UPTREND: "Market is in an uptrend (low VIX). Dips like this have usually been good buys."
+- CORRECTION, Tier-1 buy: "Market is volatile (VIX 19.4). Tier-1 dips are weaker in this kind of market. You may want to wait for Tier 2 or 3."
+- BEAR, normal buy: "Market is in a downtrend. This dip may keep falling. Only RSI <= 25 with a 200D discount <= -12% counts as capitulation."
+- BEAR, capitulation: "CAPITULATION: RSI and 200D discount are both extreme."
+- NEUTRAL / data missing: no label.
+
+Suggested size text stays (Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x, UPTREND Tier-1 1.5x, P/E 17 modifiers). In CORRECTION and BEAR the normal size is shown next to the warning; no new numbers are invented.
+
+### Safety test
+A test runs the same inputs with the feature off and on, in every regime, and asserts the on-run contains every alert the off-run contains.
+
 ## 1. Where this fits in the current code
 
 - `main.py` computes per-fund `rsi`, `dist_52w_pct`, `dist_200d_sma_pct`, then calls `check_fund_alerts`, `check_confluence_signal` (Tier 1-3 buy, 2-of-3 rules) and `check_trimming_signal` (Trim Tier 1-3). Everything is collected and sent by `dispatch_alerts_email`.

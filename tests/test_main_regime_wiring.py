@@ -147,31 +147,55 @@ def test_disabled_feature_never_builds_context_and_passes_no_regime_arguments(ha
     assert not any(a.scheme_code == "333" for a in call["alerts"])
 
 
-def test_bear_regime_suppresses_non_capitulating_funds_and_lists_them(harness):
+def fingerprint(call):
+    """Everything the email would list, ignoring regime notes and sizes."""
+    return (
+        sorted((a.scheme_code, a.alert_type) for a in call["alerts"]),
+        sorted((s.scheme_code, s.tier) for s in call["confluence"]),
+        sorted((s.scheme_code, s.tier) for s in call["trimming_signals"]),
+    )
+
+
+@pytest.mark.parametrize("regime", list(Regime))
+def test_regime_never_changes_which_alerts_are_sent(harness, regime):
+    harness.run()
+    (off,) = harness.calls["dispatch"]
+    harness.calls["dispatch"].clear()
+
+    harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True))
+    harness.state["context"] = ctx(regime)
+    assert harness.run() == 0
+    (on,) = harness.calls["dispatch"]
+
+    assert fingerprint(on) == fingerprint(off)
+    assert on["market_context"].regime is regime
+    assert "suppressed" not in on
+
+
+def test_bear_market_labels_buys_instead_of_hiding_them(harness):
     harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True))
     harness.state["context"] = ctx(Regime.BEAR)
     assert harness.run() == 0
-
     (call,) = harness.calls["dispatch"]
-    assert call["market_context"].regime is Regime.BEAR
-    assert alert_types(call, "111") == []
-    assert all("BUY TIER 3" in t for t in alert_types(call, "222")) and alert_types(call, "222")
-    assert [s.scheme_code for s in call["confluence"]] == ["222"]
-    assert call["confluence"][0].multiplier == 2.0
-    assert [s.scheme_code for s in call["suppressed"]] == ["111"]
-    assert "BEAR" in call["suppressed"][0].reason
-    assert [s.scheme_code for s in call["trimming_signals"]] == ["444"]  # trims are never gated
-    assert not any(a.scheme_code == "333" for a in call["alerts"])
+
+    by_fund = {}
+    for a in call["alerts"]:
+        by_fund.setdefault(a.scheme_code, []).append(a)
+    assert by_fund["111"], "fund 111 buys are still sent in a bear market"
+    assert all("may keep falling" in a.context_note for a in by_fund["111"] if "BUY TIER" in a.alert_type)
+    assert all(a.context_note.startswith("CAPITULATION") for a in by_fund["222"] if "BUY TIER" in a.alert_type)
+    signals = {s.scheme_code: s for s in call["confluence"]}
+    assert "may keep falling" in signals["111"].context_note
+    assert signals["222"].context_note.startswith("CAPITULATION") and signals["222"].multiplier == 2.0
+    assert "444" not in signals and [s.scheme_code for s in call["trimming_signals"]] == ["444"]
 
 
-def test_uptrend_keeps_everything_and_adds_sizes(harness):
+def test_uptrend_adds_notes_and_sizes(harness):
     harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True))
     harness.state["context"] = ctx(Regime.UPTREND)
     assert harness.run() == 0
     (call,) = harness.calls["dispatch"]
-    assert call["suppressed"] == []
-    assert {s.scheme_code for s in call["confluence"]} == {"111", "222"}
-    assert all(s.multiplier is not None for s in call["confluence"])
+    assert all(s.multiplier is not None and "uptrend" in s.context_note for s in call["confluence"])
 
 
 def test_stretched_valuation_tightens_trims_in_the_daily_run(harness):
@@ -190,11 +214,11 @@ def test_stretched_valuation_tightens_trims_in_the_daily_run(harness):
     assert [s.scheme_code for s in call["trimming_signals"]] == ["444"]
 
 
-def test_unavailable_market_data_degrades_to_the_unfiltered_alerts(harness):
+def test_unavailable_market_data_adds_no_notes(harness):
     harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True))
     harness.state["context"] = MarketContext(False, Regime.NEUTRAL, Valuation(None, "unknown"), notes=("no data",))
     assert harness.run() == 0
     (call,) = harness.calls["dispatch"]
-    assert call["suppressed"] == []
-    assert {s.scheme_code for s in call["confluence"]} == {"111", "222"}
     assert call["market_context"].available is False
+    assert all(a.context_note == "" for a in call["alerts"])
+    assert {s.scheme_code for s in call["confluence"]} == {"111", "222"}

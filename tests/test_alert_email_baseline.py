@@ -113,22 +113,28 @@ def _regime_context():
     )
 
 
-def test_banner_and_suppressed_list_are_added_without_touching_the_rest(monkeypatch):
-    from mfhelper.market_regime import SuppressedSignal
-
+def test_banner_is_added_without_touching_the_rest(monkeypatch):
     baseline = FIXTURE.read_text(encoding="utf-8")
-    suppressed = [SuppressedSignal("9", "Example Gold Fund", "Tier-1 confluence buy", "CORRECTION: Tier-1 buys are suppressed")]
-    html = render_baseline_html(monkeypatch, market_context=_regime_context(), suppressed=suppressed)
+    html = render_baseline_html(monkeypatch, market_context=_regime_context())
 
     assert "Market regime: CORRECTION" in html and "P/E 26.0 (stretched)" in html
-    assert "Suppressed by market regime (1)" in html and "Example Gold Fund" in html
-    stripped = html
-    for fragment in (
-        html[html.index('<p style="margin:0 0 12px 0'):html.index("</p>", html.index('<p style="margin:0 0 12px 0')) + 4],
-        html[html.index('<div style="margin-top:16px'):html.index("</ul></div>") + len("</ul></div>")],
-    ):
-        stripped = stripped.replace(fragment, "")
-    assert stripped == baseline
+    start = html.index('<p style="margin:0 0 12px 0')
+    banner = html[start : html.index("</p>", start) + 4]
+    assert html.replace(banner, "") == baseline
+
+
+def test_alert_row_note_is_rendered_and_escaped(monkeypatch):
+    from dataclasses import replace
+
+    triggered, confluence, trimming = sample_inputs()
+    triggered[1] = replace(triggered[1], context_note="Market is volatile. <b>wait</b>")
+    monkeypatch.setattr(alerts.smtplib, "SMTP", FakeSMTP)
+    FakeSMTP.sent = []
+    alerts.dispatch_alerts_email(triggered, _email_config(), confluence, is_dev=True, trimming_signals=trimming)
+    message = message_from_string(FakeSMTP.sent[0])
+    html = next(p for p in message.walk() if p.get_content_type() == "text/html").get_payload(decode=True).decode()
+    assert "Market is volatile. &lt;b&gt;wait&lt;/b&gt;" in html
+    assert html.count("Market is volatile") == 1  # only the one row that has a note
 
 
 def test_multiplier_and_note_appear_on_the_buy_card_only(monkeypatch):
@@ -159,14 +165,11 @@ def test_trim_context_note_is_rendered(monkeypatch):
     assert "Fired earlier than usual: P/E 25 &gt; 24" in html
 
 
-def test_a_day_with_only_suppressed_signals_sends_no_email(monkeypatch):
-    from mfhelper.market_regime import SuppressedSignal
-
+def test_a_banner_alone_never_triggers_an_email(monkeypatch):
     FakeSMTP.sent = []
     monkeypatch.setattr(alerts.smtplib, "SMTP", FakeSMTP)
-    suppressed = [SuppressedSignal("9", "Fund", "Tier-1 confluence buy", "CORRECTION")]
     sent = alerts.dispatch_alerts_email([], _email_config(), [], is_dev=True, trimming_signals=[],
-                                        market_context=_regime_context(), suppressed=suppressed)
+                                        market_context=_regime_context())
     assert sent is False and FakeSMTP.sent == []
 
 

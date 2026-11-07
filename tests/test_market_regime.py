@@ -8,11 +8,11 @@ import pytest
 from mfhelper import market_regime as mr
 from mfhelper.benchmarks import BenchmarkHistory, BenchmarkPoint
 from mfhelper.config import RegimeSettings
-from mfhelper.market_regime import MarketContext, Regime, SuppressedSignal, Valuation
+from mfhelper.market_regime import MarketContext, Regime, Valuation
 
 TODAY = date(2026, 11, 6)  # a Friday
 CFG = RegimeSettings(enable=True)
-# One-day VIX "average" so tests can flip the regime on an exact session.
+# One-day VIX "average" so tests can move the regime on an exact session.
 CFG_RAW_VIX = replace(CFG, vix_smoothing_days=1)
 
 
@@ -55,18 +55,18 @@ def fetcher(index: list[BenchmarkPoint] | None, vix: list[BenchmarkPoint] | None
     return fetch
 
 
-# --- classify_raw ---------------------------------------------------------------------
+# --- classify_regime ---------------------------------------------------------------------
 
 
 def test_bear_is_below_falling_200d_sma():
     closes = falling_after_flat()
-    assert mr.classify_raw(closes, len(closes) - 1, 12.0, CFG) is Regime.BEAR
+    assert mr.classify_regime(closes, len(closes) - 1, 12.0, CFG) is Regime.BEAR
 
 
 def test_bear_takes_precedence_over_vix_rules():
     closes = falling_after_flat()
-    assert mr.classify_raw(closes, len(closes) - 1, 30.0, CFG) is Regime.BEAR
-    assert mr.classify_raw(closes, len(closes) - 1, None, CFG) is Regime.BEAR
+    assert mr.classify_regime(closes, len(closes) - 1, 30.0, CFG) is Regime.BEAR
+    assert mr.classify_regime(closes, len(closes) - 1, None, CFG) is Regime.BEAR
 
 
 def test_below_200d_but_sma_still_rising_is_not_bear():
@@ -75,37 +75,37 @@ def test_below_200d_but_sma_still_rising_is_not_bear():
     sma_now = sum(closes[-200:]) / 200
     sma_before = sum(closes[-220:-20]) / 200
     assert sma_now > sma_before
-    assert mr.classify_raw(closes, len(closes) - 1, 12.0, CFG) is not Regime.BEAR
+    assert mr.classify_regime(closes, len(closes) - 1, 12.0, CFG) is not Regime.BEAR
 
 
 @pytest.mark.parametrize("vix", [18.0, 25.0, 60.0])
 def test_correction_has_no_upper_vix_cap(vix):
     closes = rising()
-    assert mr.classify_raw(closes, len(closes) - 1, vix, CFG) is Regime.CORRECTION
+    assert mr.classify_regime(closes, len(closes) - 1, vix, CFG) is Regime.CORRECTION
 
 
 def test_uptrend_needs_low_vix_and_index_above_50d():
     closes = rising()
-    assert mr.classify_raw(closes, len(closes) - 1, 12.0, CFG) is Regime.UPTREND
-    assert mr.classify_raw(closes, len(closes) - 1, 15.0, CFG) is Regime.NEUTRAL  # not strictly below 15
+    assert mr.classify_regime(closes, len(closes) - 1, 12.0, CFG) is Regime.UPTREND
+    assert mr.classify_regime(closes, len(closes) - 1, 15.0, CFG) is Regime.NEUTRAL  # not strictly below 15
     flat = [100.0] * 300
-    assert mr.classify_raw(flat, 299, 12.0, CFG) is Regime.NEUTRAL  # not above its 50D SMA
+    assert mr.classify_regime(flat, 299, 12.0, CFG) is Regime.NEUTRAL  # not above its 50D SMA
 
 
 def test_vix_between_bands_is_neutral():
     closes = rising()
     for vix in (15.0, 16.5, 17.99):
-        assert mr.classify_raw(closes, len(closes) - 1, vix, CFG) is Regime.NEUTRAL
+        assert mr.classify_regime(closes, len(closes) - 1, vix, CFG) is Regime.NEUTRAL
 
 
 def test_missing_vix_cannot_produce_vix_regimes():
     closes = rising()
-    assert mr.classify_raw(closes, len(closes) - 1, None, CFG) is Regime.NEUTRAL
+    assert mr.classify_regime(closes, len(closes) - 1, None, CFG) is Regime.NEUTRAL
 
 
 def test_too_little_history_is_unclassifiable():
-    assert mr.classify_raw([100.0] * 215, 214, 12.0, CFG) is None
-    assert mr.classify_raw([100.0] * 220, 219, 12.0, CFG) is Regime.NEUTRAL
+    assert mr.classify_regime([100.0] * 215, 214, 12.0, CFG) is None
+    assert mr.classify_regime([100.0] * 220, 219, 12.0, CFG) is Regime.NEUTRAL
 
 
 # --- VIX smoothing --------------------------------------------------------------------
@@ -119,7 +119,7 @@ def test_vix_average_uses_only_sessions_up_to_the_day():
     assert mr.vix_average_asof(vix, days[3], 5) is None
 
 
-# --- confirmation replay --------------------------------------------------------------
+# --- the regime follows each day (no waiting period) ------------------------------------
 
 
 def vix_series(index: list[BenchmarkPoint], tail: list[float], base: float = 12.0) -> list[BenchmarkPoint]:
@@ -127,52 +127,40 @@ def vix_series(index: list[BenchmarkPoint], tail: list[float], base: float = 12.
     return [BenchmarkPoint(p.date, v) for p, v in zip(index, values)]
 
 
-def test_regime_change_needs_three_consecutive_sessions():
+def test_regime_changes_on_the_first_day_the_market_changes():
     index = points(rising())
-    base = mr.replay_regime(index, vix_series(index, []), CFG_RAW_VIX)
-    assert base.regime is Regime.UPTREND
-
-    two_days = mr.replay_regime(index, vix_series(index, [20.0, 20.0]), CFG_RAW_VIX)
-    assert two_days.regime is Regime.UPTREND
-    assert two_days.raw_regime is Regime.CORRECTION
-    assert (two_days.pending_regime, two_days.pending_days) == (Regime.CORRECTION, 2)
-
-    three_days = mr.replay_regime(index, vix_series(index, [20.0, 20.0, 20.0]), CFG_RAW_VIX)
-    assert three_days.regime is Regime.CORRECTION
-    assert three_days.pending_regime is None
+    assert mr.read_regime(index, vix_series(index, []), CFG_RAW_VIX).regime is Regime.UPTREND
+    one_day = mr.read_regime(index, vix_series(index, [20.0]), CFG_RAW_VIX)
+    assert one_day.regime is Regime.CORRECTION
 
 
-def test_flapping_signal_never_flips_the_regime():
+def test_regime_flips_back_the_next_day():
     index = points(rising())
-    tail = [20.0, 20.0, 12.0, 20.0, 20.0, 12.0, 20.0]
-    result = mr.replay_regime(index, vix_series(index, tail), CFG_RAW_VIX)
-    assert result.regime is Regime.UPTREND
+    assert mr.read_regime(index, vix_series(index, [20.0, 12.0]), CFG_RAW_VIX).regime is Regime.UPTREND
 
 
-def test_leaving_a_regime_is_also_confirmed():
+def test_reading_exposes_the_numbers_behind_the_regime():
     index = points(rising())
-    vix = vix_series(index, [20.0] * 10 + [12.0, 12.0])
-    result = mr.replay_regime(index, vix, CFG_RAW_VIX)
-    assert result.regime is Regime.CORRECTION
-    assert (result.pending_regime, result.pending_days) == (Regime.UPTREND, 2)
+    reading = mr.read_regime(index, vix_series(index, []), CFG)
+    assert reading.as_of == TODAY and reading.vix_avg == pytest.approx(12.0)
+    assert reading.index_close == index[-1].close
+    assert reading.sma_short > reading.sma_long
 
 
-def test_replay_is_deterministic():
+def test_read_regime_needs_enough_history():
+    assert mr.read_regime(points(rising(150)), [], CFG) is None
+
+
+def test_regime_history_lists_the_regime_per_session():
     index = points(rising())
-    vix = vix_series(index, [20.0, 20.0, 20.0, 12.0])
-    assert mr.replay_regime(index, vix, CFG_RAW_VIX) == mr.replay_regime(index, vix, CFG_RAW_VIX)
+    vix = vix_series(index, [20.0, 20.0, 12.0])
+    rows = mr.regime_history(index, vix, CFG_RAW_VIX, 4)
+    assert [r.regime for r in rows] == [Regime.UPTREND, Regime.CORRECTION, Regime.CORRECTION, Regime.UPTREND]
+    assert rows[-1].day == TODAY
 
 
-def test_replay_needs_enough_history():
-    assert mr.replay_regime(points(rising(150)), [], CFG) is None
-
-
-def test_regime_history_lists_raw_and_confirmed_per_session():
-    index = points(rising())
-    vix = vix_series(index, [20.0, 20.0])
-    rows = mr.regime_history(index, vix, CFG_RAW_VIX, 3)
-    assert [r.raw for r in rows] == [Regime.UPTREND, Regime.CORRECTION, Regime.CORRECTION]
-    assert [r.effective for r in rows] == [Regime.UPTREND] * 3
+def test_regime_history_skips_sessions_without_enough_data():
+    assert mr.regime_history(points(rising(150)), [], CFG, 5) == []
 
 
 # --- build_market_context -------------------------------------------------------------
@@ -377,23 +365,17 @@ def test_banner_summarises_regime_vix_and_valuation():
     assert "P/E 22.1 (fair)" in text
 
 
-def test_banner_shows_a_pending_regime():
-    text = mr.banner_text(context(Regime.UPTREND, pending_regime=Regime.CORRECTION, pending_days=2))
-    assert "CORRECTION forming, day 2 of 3" in text
-
-
 def test_unavailable_banner_says_alerts_are_unfiltered():
     ctx = MarketContext(False, Regime.NEUTRAL, mr.UNKNOWN_VALUATION, notes=("no ^CRSLDX data",))
     text = mr.banner_text(ctx)
-    assert "Market context unavailable" in text and "without regime filtering" in text
+    assert "Market context unavailable" in text and "without a market view" in text
 
 
-def test_html_rendering_escapes_fund_names():
-    suppressed = [SuppressedSignal("1", "<script>x</script> Fund", "Tier-1 confluence buy", "CORRECTION: <b>")]
-    html = mr.render_suppressed_html(suppressed)
-    assert "<script>" not in html and "&lt;script&gt;" in html and "Suppressed by market regime (1)" in html
+def test_banner_html_is_escaped():
+    ctx = MarketContext(False, Regime.NEUTRAL, mr.UNKNOWN_VALUATION, notes=("<script>x</script>",))
+    html = mr.render_regime_banner_html(ctx)
+    assert "<script>" not in html and "&lt;script&gt;" in html
 
 
-def test_empty_renderers_return_nothing():
-    assert mr.render_suppressed_html([]) == "" and mr.render_suppressed_html(None) == ""
+def test_no_context_means_no_banner():
     assert mr.render_regime_banner_html(None) == ""

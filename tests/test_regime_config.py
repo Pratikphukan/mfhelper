@@ -35,7 +35,7 @@ def test_full_section_is_parsed(tmp_path):
     body = """
 regime:
   enable: true
-  classification: {vix_low: 14, vix_high: 20, vix_smoothing_days: 3, confirm_days: 2,
+  classification: {vix_low: 14, vix_high: 20, vix_smoothing_days: 3,
                    short_sma_days: 40, long_sma_days: 150, slope_lookback_days: 10, max_data_age_days: 4,
                    index_ticker: "^NSEI"}
   capitulation: {rsi: 22, sma_discount_pct: -15}
@@ -45,7 +45,7 @@ regime:
 """
     regime = load(tmp_path, body).regime
     assert regime.enable is True
-    assert (regime.vix_low, regime.vix_high, regime.vix_smoothing_days, regime.confirm_days) == (14, 20, 3, 2)
+    assert (regime.vix_low, regime.vix_high, regime.vix_smoothing_days) == (14, 20, 3)
     assert (regime.short_sma_days, regime.long_sma_days, regime.slope_lookback_days) == (40, 150, 10)
     assert regime.max_data_age_days == 4 and regime.index_ticker == "^NSEI"
     assert (regime.capitulation_rsi, regime.capitulation_sma_discount_pct) == (22, -15)
@@ -83,8 +83,8 @@ def test_null_section_is_fine(tmp_path):
         ("regime: {classification: {vix_low: abc}}", "vix_low must be a number"),
         ("regime: {classification: {vix_low: .nan}}", "finite"),
         ("regime: {classification: {short_sma_days: 200}}", "short_sma_days (200) must be lower than long_sma_days"),
-        ("regime: {classification: {confirm_days: 0}}", "confirm_days must be >= 1"),
-        ("regime: {classification: {confirm_days: 1.5}}", "confirm_days must be a whole number"),
+        ("regime: {classification: {slope_lookback_days: 0}}", "slope_lookback_days must be >= 1"),
+        ("regime: {classification: {max_data_age_days: 2.5}}", "max_data_age_days must be a whole number"),
         ("regime: {classification: {vix_smoothing_days: true}}", "vix_smoothing_days must be a whole number"),
         ("regime: {classification: {index_ticker: ''}}", "must not be empty"),
         ("regime: {capitulation: {rsi: 0}}", "rsi must be > 0"),

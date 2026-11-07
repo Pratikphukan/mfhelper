@@ -223,7 +223,6 @@ class RegimeSettings:
     vix_low: float = 15.0            # smoothed VIX below this (and index > short SMA) = uptrend
     vix_high: float = 18.0           # smoothed VIX at/above this = correction
     vix_smoothing_days: int = 5      # VIX is averaged over this many sessions
-    confirm_days: int = 3            # sessions a new regime must persist before it applies
     short_sma_days: int = 50
     long_sma_days: int = 200
     slope_lookback_days: int = 20    # 200D SMA is "falling" if below its value this many sessions ago
@@ -368,7 +367,6 @@ def _parse_regime(raw: dict, source: str) -> RegimeSettings:
         vix_low=vix_low,
         vix_high=vix_high,
         vix_smoothing_days=_whole(classification, "vix_smoothing_days", defaults.vix_smoothing_days, cw),
-        confirm_days=_whole(classification, "confirm_days", defaults.confirm_days, cw),
         short_sma_days=short_sma,
         long_sma_days=long_sma,
         slope_lookback_days=_whole(classification, "slope_lookback_days", defaults.slope_lookback_days, cw),

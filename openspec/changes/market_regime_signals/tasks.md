@@ -20,3 +20,12 @@
 - [x] Regime coverage report on historical data (`python regime_main.py --history N`).
 - [x] Update `daily_nav.yml` if new cache files or secrets are needed.
 - [x] README and `alerts_example.yaml` documentation.
+
+## Amendment 1 (advise, never mute) - approved and implemented
+
+- [x] User approves Amendment 1 in `design.md`.
+- [x] Remove suppression from `regime_filter.py`; add label text to buy signals and single-indicator rows.
+- [x] Remove confirmation (`confirm_days`, replay) from `market_regime.py`, `config.py`, example config, README, CLI.
+- [x] Remove the "Suppressed by market regime" email section and the only-suppressed skip rule.
+- [x] Tests: "feature on never removes an alert" in every regime (unit grid and `main.run` wiring); labels; updated affected tests.
+- [ ] Open question for the user: a daily regime line on days with no alerts (would mean an email every day). Not implemented.

@@ -1,26 +1,25 @@
-"""Apply a ``MarketContext`` to the per-fund alert results.
+"""Add market-regime advice to the per-fund alert results.
 
-Only BUY-side signals are gated by the regime. SELL / TRIM / CROSS-BELOW alerts are
-never suppressed; the only thing that changes them is a stretched Nifty 50 P/E, which
-makes the trim thresholds fire earlier. Valuation modifies suggested buy size
-regardless of regime. Sizes are text in the email, never an order.
+The regime is advice only. Nothing here removes, hides, or reorders an alert: the
+alerts and signals that go in are the ones that come out, with an optional note and
+a suggested size attached. The only thing that can change *which* alerts exist is a
+stretched Nifty 50 P/E, which makes trim thresholds fire earlier (more alerts).
 
-Per regime, for a fund that already gets technical alerts:
+Notes on BUY alerts, by regime:
 
-* NEUTRAL     unchanged
-* UPTREND     unchanged; a Tier-1 confluence is sized at ``multiplier_uptrend_tier1``
-* CORRECTION  BUY TIER 1 single-indicator alerts and a Tier-1 confluence are suppressed
-* BEAR        all BUY alerts and the BULLISH CROSS-ABOVE alert are suppressed unless the
-              fund hits capitulation (RSI and 200D SMA discount both extreme). Then only
-              its BUY TIER 3 alerts survive and a Tier-3 capitulation signal replaces the
-              normal confluence signal.
+* UPTREND     "dips like this have usually been good buys"
+* CORRECTION  a Tier-1 buy is flagged as weaker; Tier 2 and 3 get no regime note
+* BEAR        a buy with RSI and 200D SMA discount both extreme is tagged CAPITULATION;
+              every other buy carries a falling-knife warning
+* NEUTRAL     no note (also used when market data is unavailable)
+
+Sizes are text in the email (a multiple of the user's normal top-up), never an order.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 import re
-import urllib.parse
 
 from mfhelper.alerts import (
     DipBuyingSignal,
@@ -30,25 +29,14 @@ from mfhelper.alerts import (
     format_multiplier,
 )
 from mfhelper.config import AlertRulesConfig, RegimeSettings
-from mfhelper.market_regime import MarketContext, Regime, SuppressedSignal
+from mfhelper.market_regime import MarketContext, Regime
 
 _BUY_TIER = re.compile(r"^BUY TIER (\d)")
-
-
-@dataclass(frozen=True)
-class BuyDecision:
-    alerts: list[TriggeredAlert]
-    confluence: DipBuyingSignal | None
-    suppressed: SuppressedSignal | None
 
 
 def buy_tier(alert: TriggeredAlert) -> int | None:
     match = _BUY_TIER.match(alert.alert_type)
     return int(match.group(1)) if match else None
-
-
-def is_bullish_cross(alert: TriggeredAlert) -> bool:
-    return "CROSS-ABOVE" in alert.alert_type
 
 
 def meets_capitulation(rsi: float | None, dist_200d_sma: float | None, cfg: RegimeSettings) -> bool:
@@ -59,6 +47,36 @@ def meets_capitulation(rsi: float | None, dist_200d_sma: float | None, cfg: Regi
         and rsi <= cfg.capitulation_rsi
         and dist_200d_sma <= cfg.capitulation_sma_discount_pct
     )
+
+
+def regime_note(
+    tier: int,
+    context: MarketContext,
+    cfg: RegimeSettings,
+    rsi: float | None,
+    dist_200d_sma: float | None,
+) -> str:
+    """The advice sentence for a buy of ``tier``; empty when the regime has no view."""
+    regime = context.regime
+    if regime is Regime.UPTREND:
+        return "Market is in an uptrend (low VIX). Dips like this have usually been good buys."
+    if regime is Regime.CORRECTION and tier == 1:
+        vix = f" (VIX avg {context.vix_avg:.1f})" if context.vix_avg is not None else ""
+        return (
+            f"Market is volatile{vix}. Tier-1 dips are weaker in this kind of market. "
+            "You may want to wait for Tier 2 or 3."
+        )
+    if regime is Regime.BEAR:
+        if meets_capitulation(rsi, dist_200d_sma, cfg):
+            return (
+                f"CAPITULATION: RSI {rsi:.1f} and 200D SMA discount {dist_200d_sma:.1f}% are both extreme."
+            )
+        return (
+            "Market is in a downtrend. This dip may keep falling. Only RSI <= "
+            f"{cfg.capitulation_rsi:g} with a 200D SMA discount <= {cfg.capitulation_sma_discount_pct:g}% "
+            "counts as capitulation."
+        )
+    return ""
 
 
 def size_multiplier(tier: int, context: MarketContext, cfg: RegimeSettings) -> tuple[float, str]:
@@ -80,88 +98,34 @@ def size_multiplier(tier: int, context: MarketContext, cfg: RegimeSettings) -> t
     return base * factor, "; ".join(notes)
 
 
-def with_size(signal: DipBuyingSignal, context: MarketContext, cfg: RegimeSettings) -> DipBuyingSignal:
-    multiplier, note = size_multiplier(signal.tier, context, cfg)
-    return replace(signal, multiplier=multiplier, context_note=note)
-
-
-def _capitulation_signal(
-    scheme_code: str, fund_name: str, rsi: float, dist_200d: float, cfg: RegimeSettings
-) -> DipBuyingSignal:
-    return DipBuyingSignal(
-        scheme_code=scheme_code,
-        fund_name=fund_name,
-        tier=3,
-        reasons=[
-            f"RSI is {rsi:.2f} (Capitulation, <= {cfg.capitulation_rsi:g})",
-            f"200D SMA is {dist_200d:.2f}% (Capitulation, <= {cfg.capitulation_sma_discount_pct:g}%)",
-        ],
-        suggestion=(
-            "Capitulation Buy (bear market). RSI and the 200D SMA discount are both at extreme "
-            "levels while the broad market is in a confirmed downtrend."
-        ),
-        groww_link=f"https://groww.in/mutual-funds/search?q={urllib.parse.quote_plus(fund_name)}",
-    )
-
-
-def _suppressed(
-    scheme_code: str, fund_name: str, dropped_alerts: int, dropped_confluence: DipBuyingSignal | None, reason: str
-) -> SuppressedSignal | None:
-    parts = []
-    if dropped_confluence is not None:
-        parts.append(f"Tier-{dropped_confluence.tier} confluence buy")
-    if dropped_alerts:
-        parts.append(f"{dropped_alerts} single-indicator buy alert{'s' if dropped_alerts != 1 else ''}")
-    if not parts:
-        return None
-    return SuppressedSignal(scheme_code, fund_name, " + ".join(parts), reason)
-
-
-def apply_regime_to_buys(
+def annotate_buys(
     context: MarketContext,
     cfg: RegimeSettings,
     *,
-    scheme_code: str,
-    fund_name: str,
     rsi: float | None,
     dist_200d_sma: float | None,
     alerts: list[TriggeredAlert],
     confluence: DipBuyingSignal | None,
-) -> BuyDecision:
-    """Gate and size one fund's buy-side output. Non-buy alerts always pass through."""
-    regime = context.regime
+) -> tuple[list[TriggeredAlert], DipBuyingSignal | None]:
+    """Attach advice to one fund's buy alerts and confluence signal.
 
-    if regime is Regime.BEAR:
-        if meets_capitulation(rsi, dist_200d_sma, cfg):
-            kept = [a for a in alerts if (buy_tier(a) is None and not is_bullish_cross(a)) or buy_tier(a) == 3]
-            signal = _capitulation_signal(scheme_code, fund_name, rsi, dist_200d_sma, cfg)  # type: ignore[arg-type]
-            return BuyDecision(kept, with_size(signal, context, cfg), None)
-        kept = [a for a in alerts if buy_tier(a) is None and not is_bullish_cross(a)]
-        rsi_text = f"{rsi:.1f}" if rsi is not None else "n/a"
-        dist_text = f"{dist_200d_sma:.1f}%" if dist_200d_sma is not None else "n/a"
-        reason = (
-            f"BEAR: needs RSI <= {cfg.capitulation_rsi:g} and 200D SMA discount <= "
-            f"{cfg.capitulation_sma_discount_pct:g}% (now RSI {rsi_text}, {dist_text})"
-        )
-        return BuyDecision(
-            kept, None, _suppressed(scheme_code, fund_name, len(alerts) - len(kept), confluence, reason)
-        )
+    Returns the same alerts and signal, in the same order, with notes (and a size on the
+    confluence signal) added. Alerts that are not BUY TIER alerts are returned untouched.
+    """
+    annotated: list[TriggeredAlert] = []
+    for alert in alerts:
+        tier = buy_tier(alert)
+        note = regime_note(tier, context, cfg, rsi, dist_200d_sma) if tier is not None else ""
+        annotated.append(replace(alert, context_note=note) if note else alert)
 
-    if regime is Regime.CORRECTION:
-        kept = [a for a in alerts if buy_tier(a) != 1]
-        dropped_confluence = confluence if confluence is not None and confluence.tier == 1 else None
-        survivor = None if dropped_confluence else confluence
-        return BuyDecision(
-            kept,
-            with_size(survivor, context, cfg) if survivor else None,
-            _suppressed(
-                scheme_code, fund_name, len(alerts) - len(kept), dropped_confluence,
-                "CORRECTION: Tier-1 buys are suppressed",
-            ),
-        )
+    if confluence is None:
+        return annotated, None
 
-    # NEUTRAL (including "market context unavailable") and UPTREND: nothing is suppressed.
-    return BuyDecision(alerts, with_size(confluence, context, cfg) if confluence else None, None)
+    multiplier, size_notes = size_multiplier(confluence.tier, context, cfg)
+    parts = [regime_note(confluence.tier, context, cfg, rsi, dist_200d_sma)]
+    if size_notes:
+        parts.append(f"Sizing: {size_notes}.")
+    return annotated, replace(confluence, multiplier=multiplier, context_note=" ".join(p for p in parts if p))
 
 
 def check_trimming_for_context(

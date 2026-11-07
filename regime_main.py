@@ -5,7 +5,7 @@ run would use. It never touches Google Sheets, sends email, or changes state fil
 (other than refreshing the market-data cache in data/market_context/).
 
     python regime_main.py             # today's context
-    python regime_main.py --history 15   # also the last 15 sessions, raw vs confirmed
+    python regime_main.py --history 15   # also the last 15 sessions
 """
 
 from __future__ import annotations
@@ -49,20 +49,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Index  : {context.index_close:,.2f}  (50D SMA {context.sma_short:,.2f}, 200D SMA {context.sma_long:,.2f})")
         vix = f"{context.vix_avg:.2f}" if context.vix_avg is not None else "n/a"
         print(f"VIX avg: {vix}  (UPTREND < {cfg.vix_low:g}, CORRECTION >= {cfg.vix_high:g})")
-        if context.pending_regime is not None:
-            print(
-                f"Pending: {context.pending_regime.value}, day {context.pending_days} of {context.confirm_days} "
-                "(not applied yet)"
-            )
 
     if args.history > 0 and context.available:
         today = date.today()
         index = load_series(cfg.index_ticker, cache_dir=CACHE_DIR, today=today)
         vix = load_series(cfg.vix_ticker, cache_dir=CACHE_DIR, today=today)
-        print(f"\n{'Date':<12}{'Index':>12}{'VIX avg':>9}  {'Raw':<11}Confirmed")
+        print(f"\n{'Date':<12}{'Index':>12}{'VIX avg':>9}  Regime")
         for row in regime_history(index, vix, cfg, args.history):
             vix_text = f"{row.vix_avg:.2f}" if row.vix_avg is not None else "n/a"
-            print(f"{row.day.isoformat():<12}{row.index_close:>12,.2f}{vix_text:>9}  {row.raw.value:<11}{row.effective.value}")
+            print(f"{row.day.isoformat():<12}{row.index_close:>12,.2f}{vix_text:>9}  {row.regime.value}")
     return 0
 
 
