@@ -35,6 +35,7 @@ jobs:
           data/combined_portfolio_allocation.json
           data/mfapi_cache/
           data/benchmark_history/
+          data/market_context/
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
         restore-keys: |
           daily-nav-state-
@@ -128,6 +129,7 @@ jobs:
           data/combined_portfolio_allocation.json
           data/mfapi_cache/
           data/benchmark_history/
+          data/market_context/
         key: daily-nav-state-${{ github.run_id }}-${{ github.run_number }}
 
     - name: Prepare Pages Directory

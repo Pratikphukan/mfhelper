@@ -14,6 +14,8 @@ Your morning alerts are driven by a **Decision-Making Confluence Engine**. Inste
 * **Tactical Trimming Briefings:** Warns you when funds enter an extreme overbought climax run, advising you to take partial profits and pause SIPs.
 * **Asset-Class Filtering & Conflict Resolution:** Suppresses meaningless "false alarm" technical alerts for stable debt/liquid/arbitrage funds. If indicators contradict (e.g., short-term overbought but long-term discount), it merges them into a smart, consolidated `HOLD` warning.
 
+* **Market Regime Awareness (optional, off by default):** With `regime.enable: true` in `config/alerts.yaml`, buy alerts get advice from the broad market (NIFTY 500 vs its 50/200D SMA plus a 5-day average India VIX) and a suggested size from the Nifty 50 P/E. It never hides an alert. See [Market regime and valuation context](#market-regime-and-valuation-context).
+
 ### 2. 🗺️ Portfolio Overlap Analyzer (`overlap_main.py`)
 Are you secretly holding multiple mutual funds that invest in the exact same stocks?
 * Computes the **minimum-weight portfolio intersection** between all your funds.
@@ -257,11 +259,73 @@ If you've never done the first OAuth run yet, this is a no-op: just proceed with
 
 ---
 
+## Market regime and valuation context
+
+A fixed "RSI < 45" buy rule means something different in a raging bull market than in a falling one. The daily run can read the market and do two independent things, both **off by default**:
+
+| Switch in `config/alerts.yaml` | What it does |
+| --- | --- |
+| `regime.record_to_sheet: true` | Records one row per day in a separate **Market Regime** tab of your Google Sheet. It never changes an alert or an email, so it is safe to turn on first and just watch. |
+| `regime.enable: true` | Adds **advice** (notes and suggested sizes) to your buy alerts, described below. |
+
+You can turn on either one, both, or neither.
+
+**It only advises. It never removes, hides, or mutes an alert.** You get exactly the alerts you would get with the feature off, and you decide whether to follow the advice. When off, the alert email is byte-for-byte what it was before.
+
+| Regime (first match wins, using today's data) | Rule | Note added to buy alerts |
+| --- | --- | --- |
+| BEAR | NIFTY 500 below its 200D SMA, and that SMA is lower than 20 sessions ago | Every buy gets a warning that the dip may keep falling. A buy with RSI <= 25 *and* 200D SMA discount <= -12% (both required) is tagged **CAPITULATION** instead. |
+| CORRECTION | 5-day average India VIX >= 18 (no upper cap) | A Tier-1 buy is flagged as weaker here ("you may want to wait for Tier 2 or 3"). |
+| UPTREND | 5-day average VIX < 15 and index above its 50D SMA | "Dips like this have usually been good buys." |
+| NEUTRAL | anything else, or market data missing / older than 5 days | No note. |
+
+* The regime follows each day's market. There is no waiting period.
+* The note appears on each BUY TIER row and on the buy briefing cards. Sell, trim, and cross alerts never get a regime note.
+* It applies to every fund that already receives technical alerts (debt, liquid, arbitrage, overnight, and `skip` funds stay excluded). That includes gold and international funds, which follow an Indian-equity regime they do not necessarily track.
+* **Valuation (Nifty 50 P/E):** below 18, suggested buy size is multiplied by 1.25; above 24, it is halved and trim alerts fire earlier (RSI -5 points, 52-week windows +2 points). The only way the set of alerts can change is that earlier trims add alerts. P/E is used only when a valid value is fetched live from NSE. If NSE cannot be reached, P/E is blank in the sheet and no P/E-based size or trim adjustment is applied.
+* **Suggested size** is text only: Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x of your normal SIP / top-up (see `multipliers:` in the config), with Tier-1 at 1.5x in an UPTREND. In CORRECTION and BEAR the normal size is shown next to the warning. Nothing places an order.
+* The email gets a one-line regime banner at the top. As before, an email is only sent on days when at least one alert fires.
+
+### The Market Regime tab
+
+With `regime.record_to_sheet: true`, each daily run writes one row to a tab called **Market Regime** (change it with `regime.sheet_name`; under `--dev` the tab is **Market Regime (Dev)**). The Daily NAV tab is never touched.
+
+| Column | Meaning |
+| --- | --- |
+| Run Timestamp (IST) | Same format as the Daily NAV tab |
+| Regime | BEAR / CORRECTION / UPTREND / NEUTRAL |
+| NIFTY 500 | Latest close |
+| Short SMA / Long SMA | The 50-day and 200-day averages (defaults; see `classification:` in the config) |
+| VIX (smoothed) | The 5-day average India VIX (default) |
+| Nifty 50 P/E, P/E state | The P/E and cheap / fair / stretched / unknown |
+| P/E source | `nse` when a valid live P/E was fetched; blank when unavailable |
+| Market data as of | Date of the latest NIFTY 500 close |
+| Notes | e.g. `no ^INDIAVIX data` when something was missing |
+
+* The tab is created **right next to the Daily NAV tab** (immediately to its right). Only a newly created tab is placed; if you later drag it elsewhere, it stays where you put it.
+* It is written every day the switch is on, whether or not any alert fires, and no email is involved.
+* A re-run on the same date **replaces** that date's row. Other rows are never rewritten.
+* Rows older than `regime.sheet_keep_days` (default **180** days) are removed from this tab after each write. The header row, today's row, and any row whose first cell is not a date are never removed, and no other tab is touched.
+* If market data is missing, the row is still written (Regime `NEUTRAL`, blank numbers, the reason in Notes).
+* If the tab already exists with a different header, nothing is written and a warning is logged, so your own data is never overwritten.
+* A failed write is only a warning: it cannot stop the NAV row, the alerts, or the email.
+* P/E has no free history, so this tab slowly builds one. Recording it for a while is a good way to see how often each regime really fires before you let it touch alerts.
+
+Check what today's run would use (read-only; touches no sheet and sends no email):
+
+```
+python regime_main.py              # current regime, VIX, valuation
+python regime_main.py --history 15 # plus the regime for each of the last 15 sessions
+```
+
+Market data comes from Yahoo Finance (`^CRSLDX`, `^INDIAVIX`) and is cached in `data/market_context/` (git-ignored, persisted between GitHub Actions runs). If you run the scheduler on GitHub Actions, add the `regime:` block from `config/alerts_example.yaml` to your `ALERTS_YAML` secret. NSE sometimes blocks cloud IP ranges; when that happens, P/E is left unavailable rather than filled from an older or manual value.
+
 ## Project layout
 
 ```
 MFHelper/
   main.py                        # daily NAV scheduler entry point
+  regime_main.py                 # read-only: show today's market regime / valuation context
   analytics_main.py              # on-demand analytics report CLI
   historical_main.py             # on-demand per-fund N-day drilldown CLI
   backfill_main.py               # one-shot: fill historical Daily NAV rows for one fund
