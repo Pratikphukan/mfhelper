@@ -64,11 +64,11 @@ A test runs the same inputs with the feature off and on, in every regime, and as
 | Why not the Daily NAV tab | It is one column group per fund with strict layout guards (`sheet_columns.json`, migrations, 30-row trim). Market data is one set per day, not per fund. Every other feature already uses its own tab (analytics, gold ETF, overlap, historical, portfolio map). |
 | Rows | One row per run date. A re-run on the same date **replaces** that date's row (matched on the date part of column A). |
 | Retention | ~~Keep all rows~~ superseded by Amendment 4: keep the last 180 days. |
-| When written | Every daily run while `regime.enable` is true, whether or not any alert fires. Nothing is written when the regime is disabled. |
+| When written | Every daily run while `regime.record_to_sheet` is true (see Amendment 3), whether or not any alert fires. Nothing is written when it is false. |
 | Dev runs | `--dev` writes to **"Market Regime (Dev)"**, matching the NAV sheet's "(Dev)" tab. |
 | Failure | A failed sheet write is logged as a warning and the run continues. It cannot block the NAV row, the alerts, or the email. |
 | Missing market data | The row is still written: Regime `NEUTRAL`, number cells blank, reason in Notes. |
-| Switch | `regime.record_to_sheet: true` (default true; only takes effect when `regime.enable` is true). |
+| Switch | `regime.record_to_sheet: true`. ~~default true; only takes effect when `regime.enable` is true~~ superseded by Amendment 3: it **defaults to false** and works **independently** of `regime.enable`. |
 | Credentials | Reuses the existing Google credentials and `_load_credentials`. No new secrets. |
 
 ### Columns
