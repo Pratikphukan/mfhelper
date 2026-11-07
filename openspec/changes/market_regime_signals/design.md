@@ -52,6 +52,66 @@ Suggested size text stays (Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x, UPTREND Tier-1
 ### Safety test
 A test runs the same inputs with the feature off and on, in every regime, and asserts the on-run contains every alert the off-run contains.
 
+## Amendment 2: record the market regime in its own Google Sheet tab (APPROVED by the user on 2026-11-07, implemented; see Amendment 3 for two changes)
+
+**User request:** record the regime somewhere, like the Daily NAV. **User choice:** a different sheet is fine; it does not need to go in the Daily NAV sheet. Replace-same-day and keep-all-rows were offered as defaults and not objected to.
+
+### Decisions
+
+| Topic | Proposal |
+| --- | --- |
+| Where | A new tab **"Market Regime"** in the same spreadsheet (`settings.google_sheet.spreadsheet_id`). The Daily NAV tab and its column layout are never touched. |
+| Why not the Daily NAV tab | It is one column group per fund with strict layout guards (`sheet_columns.json`, migrations, 30-row trim). Market data is one set per day, not per fund. Every other feature already uses its own tab (analytics, gold ETF, overlap, historical, portfolio map). |
+| Rows | One row per run date. A re-run on the same date **replaces** that date's row (matched on the date part of column A). |
+| Retention | Keep all rows. No trimming (about one row a day). |
+| When written | Every daily run while `regime.enable` is true, whether or not any alert fires. Nothing is written when the regime is disabled. |
+| Dev runs | `--dev` writes to **"Market Regime (Dev)"**, matching the NAV sheet's "(Dev)" tab. |
+| Failure | A failed sheet write is logged as a warning and the run continues. It cannot block the NAV row, the alerts, or the email. |
+| Missing market data | The row is still written: Regime `NEUTRAL`, number cells blank, reason in Notes. |
+| Switch | `regime.record_to_sheet: true` (default true; only takes effect when `regime.enable` is true). |
+| Credentials | Reuses the existing Google credentials and `_load_credentials`. No new secrets. |
+
+### Columns
+
+| # | Header | Value |
+| --- | --- | --- |
+| A | Run Timestamp (IST) | e.g. `2026-11-06 10:30:02` (same format as Daily NAV) |
+| B | Regime | BEAR / CORRECTION / UPTREND / NEUTRAL |
+| C | NIFTY 500 | latest close, 2 decimals |
+| D | 50D SMA | 2 decimals |
+| E | 200D SMA | 2 decimals |
+| F | VIX (5-day avg) | 2 decimals |
+| G | Nifty 50 P/E | 1 decimal |
+| H | P/E state | cheap / fair / stretched / unknown |
+| I | P/E source | `nse`, `nse_cache (date)`, `manual (date, STALE)`, or blank |
+| J | Market data as of | date of the latest NIFTY 500 close |
+| K | Notes | e.g. `no ^INDIAVIX data`, `^CRSLDX data is 7 days old` |
+
+### Safety rules
+
+- The writer creates the tab and header if missing. If the tab exists with a **different** header, it refuses to write, logs a warning, and leaves the tab alone (never overwrite someone's data).
+- Replace-same-day only edits the matching row. Other rows are never rewritten.
+- Header row frozen; number formats applied. Same retry-on-429/5xx helper pattern as the other tab writers.
+- Verification uses a fake worksheet. No real sheet is written during development; `--dev` is used for any manual run.
+
+### Not included (can be added later if wanted)
+
+- Backfilling past days from `regime_history`. P/E has no free history, so past rows would have a blank P/E.
+- Writing the regime into the alert email on days with no alerts (no email is sent).
+
+## Amendment 3: record first, alerts later (APPROVED by the user on 2026-11-07, implemented)
+
+**User decision:** "Build this now, no alerts for now. We will monitor for a month and then build the alerts."
+
+Changes to Amendment 2 and the earlier design:
+
+| Topic | Change |
+| --- | --- |
+| Switches | `regime.enable` (advice on alerts) and `regime.record_to_sheet` (daily row) are now **independent**. Both default to false. Recording alone never changes an alert, an email, or adds a banner. The market context is fetched once if either is on. |
+| Tab name | Configurable with `regime.sheet_name` (default "Market Regime"); " (Dev)" is appended under `--dev`. |
+| Headers | SMA columns are headed "Short SMA" / "Long SMA" and the VIX column "VIX (smoothed)", because the windows (50 / 200 / 5 days) are configurable and the header guard needs fixed text. |
+| Rollout | Turn on `record_to_sheet` now. After about a month of rows, review how often each regime fired and decide whether to turn on `enable` (the advice-on-alerts code is already built and tested, and stays off). |
+
 ## 1. Where this fits in the current code
 
 - `main.py` computes per-fund `rsi`, `dist_52w_pct`, `dist_200d_sma_pct`, then calls `check_fund_alerts`, `check_confluence_signal` (Tier 1-3 buy, 2-of-3 rules) and `check_trimming_signal` (Trim Tier 1-3). Everything is collected and sent by `dispatch_alerts_email`.

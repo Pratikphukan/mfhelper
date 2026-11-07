@@ -77,6 +77,11 @@ def test_null_section_is_fine(tmp_path):
         ("regime: [1, 2]", "'regime' must be a mapping"),
         ("regime: {enable: 'yes'}", "enable must be true or false"),
         ("regime: {enable: 1}", "enable must be true or false"),
+        ("regime: {record_to_sheet: 'yes'}", "record_to_sheet must be true or false"),
+        ("regime: {record_to_sheet: 1}", "record_to_sheet must be true or false"),
+        ("regime: {sheet_name: ''}", "sheet_name must be a non-empty text"),
+        ("regime: {sheet_name: 5}", "sheet_name must be a non-empty text"),
+        ("regime: {sheet_name: '%s'}" % ("x" * 91), "at most 90 characters"),
         ("regime: {classification: {vix_low: 18, vix_high: 18}}", "vix_low (18.0) must be lower than vix_high"),
         ("regime: {classification: {vix_low: 20, vix_high: 15}}", "must be lower than vix_high"),
         ("regime: {classification: {vix_low: 0}}", "vix_low must be > 0"),
@@ -111,6 +116,19 @@ def test_invalid_values_fail_loudly_with_the_offending_key(tmp_path, body, messa
 def test_example_file_documents_every_regime_key():
     raw = yaml.safe_load(EXAMPLE.read_text(encoding="utf-8"))["regime"]
     documented = {
-        "enable", "classification", "capitulation", "valuation", "multipliers", "trimming",
+        "enable", "record_to_sheet", "sheet_name", "classification", "capitulation", "valuation",
+        "multipliers", "trimming",
     }
     assert documented == set(raw)
+
+
+def test_recording_and_advice_are_independent_switches(tmp_path):
+    record_only = load(tmp_path, "regime: {record_to_sheet: true}").regime
+    assert record_only.record_to_sheet is True and record_only.enable is False
+    advice_only = load(tmp_path, "regime: {enable: true}").regime
+    assert advice_only.enable is True and advice_only.record_to_sheet is False
+    assert RegimeSettings().record_to_sheet is False and RegimeSettings().sheet_name == "Market Regime"
+
+
+def test_sheet_name_is_configurable_and_trimmed(tmp_path):
+    assert load(tmp_path, "regime: {sheet_name: '  Market Mood  '}").regime.sheet_name == "Market Mood"

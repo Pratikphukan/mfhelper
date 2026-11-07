@@ -38,8 +38,10 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
     settings = load_alert_settings(ALERTS_PATH)
     cfg = settings.regime
-    if not cfg.enable:
-        print("Note: regime.enable is false in alerts.yaml, so the daily run ignores this context.\n")
+    print(
+        f"Switches in alerts.yaml: regime.enable (advice on alerts) = {cfg.enable}, "
+        f"regime.record_to_sheet (daily row in the '{cfg.sheet_name}' tab) = {cfg.record_to_sheet}\n"
+    )
 
     context = build_market_context(cfg, cache_dir=CACHE_DIR)
     print(banner_text(context))

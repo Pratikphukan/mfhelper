@@ -45,6 +45,7 @@ from mfhelper.state import LastNavStore, PrevNav
 from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal, resolve_conflicting_alerts, check_trimming_signal
 from mfhelper.market_regime import banner_text, build_market_context
 from mfhelper.regime_filter import annotate_buys, check_trimming_for_context
+from mfhelper.regime_sheet import RegimeSheetWriter
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -135,13 +136,17 @@ def run(args: argparse.Namespace) -> int:
     nav_store = LastNavStore(LAST_NAV_PATH)
     prev_state = nav_store.load()
 
-    # Market regime / valuation context. Left as None (and every code path below behaves
-    # exactly as before) unless `regime.enable: true` is set in alerts.yaml.
+    # Market regime / valuation context. Two independent switches in alerts.yaml:
+    #   regime.enable           -> advice (notes, sizes, banner) on alerts
+    #   regime.record_to_sheet  -> one daily row in the "Market Regime" tab, nothing else
+    # With both off, nothing is fetched and every code path below behaves exactly as before.
     regime_cfg = alert_settings.regime
     market_context = None
-    if regime_cfg.enable:
+    if regime_cfg.enable or regime_cfg.record_to_sheet:
         market_context = build_market_context(regime_cfg, cache_dir=DATA_DIR / "market_context")
         log.info("[REGIME] %s", banner_text(market_context))
+    # Only this switch lets the regime touch alerts and the email.
+    advice_context = market_context if regime_cfg.enable else None
 
     all_triggered_alerts = []
     all_confluence_signals = []
@@ -257,9 +262,9 @@ def run(args: argparse.Namespace) -> int:
 
             # Add market-regime advice (notes and suggested size) to the buy side.
             # Advice only: the same alerts and signals come out as went in.
-            if market_context is not None:
+            if advice_context is not None:
                 triggered, confluence = annotate_buys(
-                    market_context,
+                    advice_context,
                     regime_cfg,
                     rsi=rsi_value,
                     dist_200d_sma=dist_200d_sma_pct,
@@ -275,9 +280,9 @@ def run(args: argparse.Namespace) -> int:
                 log.info("  [CONFLUENCE] Triggered Tier-%d buy signal for %s", confluence.tier, fund.code)
 
             # Check for overbought trimming opportunities
-            if market_context is not None:
+            if advice_context is not None:
                 trim_signal = check_trimming_for_context(
-                    market_context,
+                    advice_context,
                     regime_cfg,
                     scheme_code=fund.code,
                     fund_name=display_names[fund.code],
@@ -349,6 +354,19 @@ def run(args: argparse.Namespace) -> int:
             settings.history_days,
         )
 
+    if regime_cfg.record_to_sheet and market_context is not None:
+        # Own tab, never the Daily NAV tab. A failure here must not affect the NAV row or alerts.
+        regime_tab = f"{regime_cfg.sheet_name} (Dev)" if args.dev else regime_cfg.sheet_name
+        try:
+            RegimeSheetWriter(
+                spreadsheet_id=settings.google_sheet.spreadsheet_id,
+                worksheet_name=regime_tab,
+                credentials_path=CREDENTIALS_PATH,
+                token_path=TOKEN_PATH,
+            ).record(run_timestamp, market_context)
+        except Exception as exc:
+            log.warning("Could not record the market regime to tab %r: %s", regime_tab, exc)
+
     col_store.save(ordered_codes)
     nav_store.save(new_state)
     log.info(
@@ -361,13 +379,13 @@ def run(args: argparse.Namespace) -> int:
     resolved_alerts = resolve_conflicting_alerts(all_triggered_alerts)
 
     # Dispatch indicator alerts email digest if any are triggered
-    if market_context is None:
+    if advice_context is None:
         dispatch_alerts_email(resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev, trimming_signals=all_trimming_signals)
     else:
         dispatch_alerts_email(
             resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev,
             trimming_signals=all_trimming_signals,
-            market_context=market_context,
+            market_context=advice_context,
         )
 
     if fallback_codes:

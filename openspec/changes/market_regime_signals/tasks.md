@@ -28,4 +28,15 @@
 - [x] Remove confirmation (`confirm_days`, replay) from `market_regime.py`, `config.py`, example config, README, CLI.
 - [x] Remove the "Suppressed by market regime" email section and the only-suppressed skip rule.
 - [x] Tests: "feature on never removes an alert" in every regime (unit grid and `main.run` wiring); labels; updated affected tests.
-- [ ] Open question for the user: a daily regime line on days with no alerts (would mean an email every day). Not implemented.
+- [x] Quiet-day question: answered by Amendment 2 (the sheet row is written daily with no email). No daily email.
+
+## Amendment 2 (record to a "Market Regime" tab) and Amendment 3 (record first, alerts later) - approved and implemented
+
+- [x] User approves Amendments 2 and 3 in `design.md`.
+- [x] `RegimeSettings.record_to_sheet` + `sheet_name` (both independent of `enable`) + validation + example config + README.
+- [x] `mfhelper/regime_sheet.py`: `RegimeSheetWriter` (create tab/header, header-mismatch guard, replace same-day row, formats, retry, grow rows).
+- [x] Wire into `main.py` after the NAV row is written; "(Dev)" tab under `--dev`; failures are warnings only.
+- [x] Tests with a fake worksheet: create, append, same-day replace, header mismatch refusal, unavailable-data row, grow, retry; `main.run` wiring for record-only, advice-only, both, off, failing writer.
+- [x] `pytest tests/` passes. No real sheet was written (fakes only).
+- [ ] User: turn on `regime.record_to_sheet: true` in the `ALERTS_YAML` secret (and a manual `nifty50_pe` fallback), run once with `--dev` to see the "Market Regime (Dev)" tab, then let it run for about a month.
+- [ ] After a month: review the tab and decide whether to turn on `regime.enable`.

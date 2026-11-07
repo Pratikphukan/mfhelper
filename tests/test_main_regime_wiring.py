@@ -52,6 +52,23 @@ class FakeAppender:
         return 0
 
 
+class FakeRegimeWriter:
+    created: list["FakeRegimeWriter"] = []
+    fail = False
+
+    def __init__(self, *, spreadsheet_id, worksheet_name, credentials_path, token_path):
+        self.spreadsheet_id = spreadsheet_id
+        self.worksheet_name = worksheet_name
+        self.recorded: list[tuple[str, MarketContext]] = []
+        FakeRegimeWriter.created.append(self)
+
+    def record(self, run_timestamp, context):
+        if FakeRegimeWriter.fail:
+            raise RuntimeError("sheet is down")
+        self.recorded.append((run_timestamp, context))
+        return 2
+
+
 class FakeColumnStore:
     def __init__(self, *_a):
         pass
@@ -71,6 +88,8 @@ class FakeNavStore(FakeColumnStore):
 @pytest.fixture
 def harness(monkeypatch):
     FakeAppender.created = []
+    FakeRegimeWriter.created = []
+    FakeRegimeWriter.fail = False
     calls = {"dispatch": [], "build_context": 0}
 
     def settings_for(regime: RegimeSettings) -> AlertSettings:
@@ -92,6 +111,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(main_module, "SheetColumnStore", FakeColumnStore)
     monkeypatch.setattr(main_module, "LastNavStore", FakeNavStore)
     monkeypatch.setattr(main_module, "SheetAppender", FakeAppender)
+    monkeypatch.setattr(main_module, "RegimeSheetWriter", FakeRegimeWriter)
 
     current = {"code": None}
 
@@ -222,3 +242,79 @@ def test_unavailable_market_data_adds_no_notes(harness):
     assert call["market_context"].available is False
     assert all(a.context_note == "" for a in call["alerts"])
     assert {s.scheme_code for s in call["confluence"]} == {"111", "222"}
+
+
+# --- recording to the Market Regime tab ------------------------------------------------------
+
+
+def test_feature_off_fetches_nothing_and_writes_no_regime_row(harness):
+    assert harness.run() == 0
+    assert harness.calls["build_context"] == 0 and FakeRegimeWriter.created == []
+
+
+def test_record_only_writes_one_row_to_the_dev_tab_and_leaves_alerts_alone(harness):
+    harness.run()
+    (off,) = harness.calls["dispatch"]
+    harness.calls["dispatch"].clear()
+
+    harness.state["alert_settings"] = harness.settings_for(RegimeSettings(record_to_sheet=True))
+    harness.state["context"] = ctx(Regime.BEAR)
+    assert harness.run() == 0
+
+    (writer,) = FakeRegimeWriter.created
+    assert writer.worksheet_name == "Market Regime (Dev)" and writer.spreadsheet_id == "sheet-id"
+    ((_, recorded),) = writer.recorded
+    assert recorded.regime is Regime.BEAR
+
+    (on,) = harness.calls["dispatch"]
+    assert fingerprint(on) == fingerprint(off)
+    assert "market_context" not in on  # no banner
+    assert all(a.context_note == "" for a in on["alerts"])
+    assert all(s.multiplier is None and s.context_note == "" for s in on["confluence"])
+    assert FakeAppender.created[0].worksheet_name == "Sheet1 (Dev)"  # the NAV tab is untouched
+
+
+def test_advice_only_does_not_write_to_the_sheet(harness):
+    harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True))
+    harness.state["context"] = ctx(Regime.UPTREND)
+    assert harness.run() == 0
+    assert FakeRegimeWriter.created == []
+    (call,) = harness.calls["dispatch"]
+    assert call["market_context"].regime is Regime.UPTREND
+
+
+def test_both_switches_record_and_advise(harness):
+    harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True, record_to_sheet=True))
+    harness.state["context"] = ctx(Regime.UPTREND)
+    assert harness.run() == 0
+    assert harness.calls["build_context"] == 1  # fetched once, shared by both
+    (writer,) = FakeRegimeWriter.created
+    assert len(writer.recorded) == 1
+    (call,) = harness.calls["dispatch"]
+    assert call["market_context"].regime is Regime.UPTREND
+
+
+def test_custom_tab_name_is_used(harness):
+    harness.state["alert_settings"] = harness.settings_for(
+        RegimeSettings(record_to_sheet=True, sheet_name="Market Mood")
+    )
+    harness.state["context"] = ctx(Regime.NEUTRAL)
+    harness.run()
+    assert FakeRegimeWriter.created[0].worksheet_name == "Market Mood (Dev)"
+
+
+def test_unavailable_data_is_still_recorded(harness):
+    harness.state["alert_settings"] = harness.settings_for(RegimeSettings(record_to_sheet=True))
+    unavailable = MarketContext(False, Regime.NEUTRAL, Valuation(None, "unknown"), notes=("no data",))
+    harness.state["context"] = unavailable
+    assert harness.run() == 0
+    ((_, recorded),) = FakeRegimeWriter.created[0].recorded
+    assert recorded.available is False
+
+
+def test_a_failing_regime_sheet_never_breaks_the_run_or_the_alerts(harness):
+    FakeRegimeWriter.fail = True
+    harness.state["alert_settings"] = harness.settings_for(RegimeSettings(record_to_sheet=True))
+    harness.state["context"] = ctx(Regime.BEAR)
+    assert harness.run() == 0
+    assert len(harness.calls["dispatch"]) == 1  # alerts still went out

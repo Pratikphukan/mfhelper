@@ -261,7 +261,14 @@ If you've never done the first OAuth run yet, this is a no-op: just proceed with
 
 ## Market regime and valuation context
 
-A fixed "RSI < 45" buy rule means something different in a raging bull market than in a falling one. When `regime.enable: true` is set in `config/alerts.yaml`, the daily run reads the market and adds **advice** to your buy alerts. It is **off by default**.
+A fixed "RSI < 45" buy rule means something different in a raging bull market than in a falling one. The daily run can read the market and do two independent things, both **off by default**:
+
+| Switch in `config/alerts.yaml` | What it does |
+| --- | --- |
+| `regime.record_to_sheet: true` | Records one row per day in a separate **Market Regime** tab of your Google Sheet. It never changes an alert or an email, so it is safe to turn on first and just watch. |
+| `regime.enable: true` | Adds **advice** (notes and suggested sizes) to your buy alerts, described below. |
+
+You can turn on either one, both, or neither.
 
 **It only advises. It never removes, hides, or mutes an alert.** You get exactly the alerts you would get with the feature off, and you decide whether to follow the advice. When off, the alert email is byte-for-byte what it was before.
 
@@ -278,6 +285,29 @@ A fixed "RSI < 45" buy rule means something different in a raging bull market th
 * **Valuation (Nifty 50 P/E):** below 18, suggested buy size is multiplied by 1.25; above 24, it is halved and trim alerts fire earlier (RSI -5 points, 52-week windows +2 points). The only way the set of alerts can change is that earlier trims add alerts. The P/E is read from NSE; if NSE cannot be reached, a recent cached value is used, then the manual `valuation.nifty50_pe` value (with a stale warning after 7 days), and if none exists, no valuation adjustment is made.
 * **Suggested size** is text only: Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x of your normal SIP / top-up (see `multipliers:` in the config), with Tier-1 at 1.5x in an UPTREND. In CORRECTION and BEAR the normal size is shown next to the warning. Nothing places an order.
 * The email gets a one-line regime banner at the top. As before, an email is only sent on days when at least one alert fires.
+
+### The Market Regime tab
+
+With `regime.record_to_sheet: true`, each daily run writes one row to a tab called **Market Regime** (change it with `regime.sheet_name`; under `--dev` the tab is **Market Regime (Dev)**). The Daily NAV tab is never touched.
+
+| Column | Meaning |
+| --- | --- |
+| Run Timestamp (IST) | Same format as the Daily NAV tab |
+| Regime | BEAR / CORRECTION / UPTREND / NEUTRAL |
+| NIFTY 500 | Latest close |
+| Short SMA / Long SMA | The 50-day and 200-day averages (defaults; see `classification:` in the config) |
+| VIX (smoothed) | The 5-day average India VIX (default) |
+| Nifty 50 P/E, P/E state | The P/E and cheap / fair / stretched / unknown |
+| P/E source | `nse`, `nse_cache (date)`, or `manual (date[, STALE])` |
+| Market data as of | Date of the latest NIFTY 500 close |
+| Notes | e.g. `no ^INDIAVIX data` when something was missing |
+
+* It is written every day the switch is on, whether or not any alert fires, and no email is involved.
+* A re-run on the same date **replaces** that date's row. Other rows are never rewritten and nothing is trimmed.
+* If market data is missing, the row is still written (Regime `NEUTRAL`, blank numbers, the reason in Notes).
+* If the tab already exists with a different header, nothing is written and a warning is logged, so your own data is never overwritten.
+* A failed write is only a warning: it cannot stop the NAV row, the alerts, or the email.
+* P/E has no free history, so this tab slowly builds one. Recording it for a while is a good way to see how often each regime really fires before you let it touch alerts.
 
 Check what today's run would use (read-only; touches no sheet and sends no email):
 

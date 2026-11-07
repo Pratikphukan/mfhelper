@@ -211,11 +211,22 @@ class AlertEmailConfig:
     receiver_email: str
 
 
+# Google Sheets caps tab names at 100 characters; leave room for the " (Dev)" suffix.
+MAX_SHEET_NAME_LENGTH = 90
+
+
 @dataclass(frozen=True)
 class RegimeSettings:
-    """Market regime / valuation context (``regime:`` in alerts.yaml). Off by default."""
+    """Market regime / valuation context (``regime:`` in alerts.yaml). Everything is off by default.
+
+    ``enable`` adds advice (notes and suggested sizes) to alerts. ``record_to_sheet`` only records
+    a daily row in its own Google Sheet tab. The two are independent: recording alone never
+    changes an alert or an email.
+    """
 
     enable: bool = False
+    record_to_sheet: bool = False
+    sheet_name: str = "Market Regime"
 
     # Regime classification (NIFTY 500 + India VIX).
     index_ticker: str = "^CRSLDX"
@@ -305,6 +316,15 @@ def _parse_regime(raw: dict, source: str) -> RegimeSettings:
     enable = raw.get("enable", defaults.enable)
     if not isinstance(enable, bool):
         raise ValueError(f"{where}.enable must be true or false (got {enable!r}).")
+    record_to_sheet = raw.get("record_to_sheet", defaults.record_to_sheet)
+    if not isinstance(record_to_sheet, bool):
+        raise ValueError(f"{where}.record_to_sheet must be true or false (got {record_to_sheet!r}).")
+    sheet_name = raw.get("sheet_name", defaults.sheet_name)
+    if not isinstance(sheet_name, str) or not sheet_name.strip():
+        raise ValueError(f"{where}.sheet_name must be a non-empty text (got {sheet_name!r}).")
+    sheet_name = sheet_name.strip()
+    if len(sheet_name) > MAX_SHEET_NAME_LENGTH:
+        raise ValueError(f"{where}.sheet_name must be at most {MAX_SHEET_NAME_LENGTH} characters.")
 
     classification = _section(raw, "classification", where)
     capitulation = _section(raw, "capitulation", where)
@@ -362,6 +382,8 @@ def _parse_regime(raw: dict, source: str) -> RegimeSettings:
     positive = {"minimum": 0, "exclusive_minimum": True}
     return RegimeSettings(
         enable=enable,
+        record_to_sheet=record_to_sheet,
+        sheet_name=sheet_name,
         index_ticker=index_ticker,
         vix_ticker=vix_ticker,
         vix_low=vix_low,
