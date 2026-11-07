@@ -12,6 +12,7 @@ data/sheet_columns.json
 data/fund_returns/
 data/fund_plots/
 data/benchmark_history/
+data/market_context/
 data/mfapi_cache/
 data/daily_nav_dump.csv
 data/combined_portfolio_allocation.json

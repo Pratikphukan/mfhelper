@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import html as html_lib
 import logging
 import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from typing import TYPE_CHECKING
 
 from mfhelper.config import AlertEmailConfig, AlertRulesConfig
 from mfhelper.metrics import distance_from_200d_sma
+
+if TYPE_CHECKING:  # market_regime pulls in yfinance, so only import it when it is actually used
+    from mfhelper.market_regime import MarketContext, SuppressedSignal
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +40,9 @@ class DipBuyingSignal:
     reasons: list[str]      # e.g., ["RSI is 32.5 (Oversold)", "52W Drop is -22.4% (Deep)"]
     suggestion: str
     groww_link: str         # Direct buy button link
+    # Set only by the market-regime layer: suggested size as a multiple of the normal top-up.
+    multiplier: float | None = None
+    context_note: str = ""  # Why the multiplier was chosen (regime / valuation), shown in the email
 
 
 def check_confluence_signal(
@@ -118,6 +126,7 @@ class TrimmingSignal:
     reasons: list[str]      # e.g., ["RSI is 76.5 (Overbought)", "52W Drop is -0.5% (Peak)"]
     suggestion: str
     groww_link: str         # Direct search page link
+    context_note: str = ""  # Set only by the market-regime layer (e.g. thresholds tightened)
 
 
 def check_trimming_signal(
@@ -126,17 +135,24 @@ def check_trimming_signal(
     current_rsi: float | None,
     current_dist_52w: float | None,
     rules: AlertRulesConfig,
+    *,
+    rsi_offset: float = 0.0,
+    dist_52w_offset: float = 0.0,
 ) -> TrimmingSignal | None:
-    """Check today's indicators for a single fund to see if they form an overbought trimming signal."""
+    """Check today's indicators for a single fund to see if they form an overbought trimming signal.
+
+    ``rsi_offset`` lowers every RSI threshold and ``dist_52w_offset`` widens every 52-week
+    window (in percentage points), so trims fire earlier. Both default to 0 (the fixed rules).
+    """
     import urllib.parse
     groww_query = urllib.parse.quote_plus(fund_name)
     groww_link = f"https://groww.in/mutual-funds/search?q={groww_query}"
 
     # Trim Tier 3 (Extreme Climax Peak - Urgent Action)
     t3_reasons = []
-    if current_rsi is not None and current_rsi >= 75.0:
+    if current_rsi is not None and current_rsi >= 75.0 - rsi_offset:
         t3_reasons.append(f"RSI is {current_rsi:.2f} (Extreme Overbought)")
-    if current_dist_52w is not None and current_dist_52w >= -1.0:
+    if current_dist_52w is not None and current_dist_52w >= -1.0 - dist_52w_offset:
         t3_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Urgent Peak)")
 
     if len(t3_reasons) >= 2:
@@ -151,9 +167,9 @@ def check_trimming_signal(
 
     # Trim Tier 2 (Moderate Overstretch - Trim Zone)
     t2_reasons = []
-    if current_rsi is not None and current_rsi >= 70.0:
+    if current_rsi is not None and current_rsi >= 70.0 - rsi_offset:
         t2_reasons.append(f"RSI is {current_rsi:.2f} (Standard Overbought)")
-    if current_dist_52w is not None and current_dist_52w >= -3.0:
+    if current_dist_52w is not None and current_dist_52w >= -3.0 - dist_52w_offset:
         t2_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Near Peak)")
 
     if len(t2_reasons) >= 2:
@@ -168,9 +184,9 @@ def check_trimming_signal(
 
     # Trim Tier 1 (Mild Momentum Run)
     t1_reasons = []
-    if current_rsi is not None and current_rsi >= 65.0:
+    if current_rsi is not None and current_rsi >= 65.0 - rsi_offset:
         t1_reasons.append(f"RSI is {current_rsi:.2f} (Mild Momentum)")
-    if current_dist_52w is not None and current_dist_52w >= -5.0:
+    if current_dist_52w is not None and current_dist_52w >= -5.0 - dist_52w_offset:
         t1_reasons.append(f"52W Drop is {current_dist_52w:.2f}% (Close to Peak)")
 
     if len(t1_reasons) >= 2:
@@ -341,14 +357,41 @@ def check_fund_alerts(
     return alerts
 
 
+def format_multiplier(value: float) -> str:
+    """``1.5`` -> ``"1.5x"``, ``2.0`` -> ``"2x"``, ``1.875`` -> ``"1.88x"``."""
+    return f"{value:.2f}".rstrip("0").rstrip(".") + "x"
+
+
+def _signal_note_html(multiplier: float | None, context_note: str) -> str:
+    """Optional regime line for a briefing card. Empty (and invisible) unless regime data is set."""
+    if multiplier is None and not context_note:
+        return ""
+    parts = []
+    if multiplier is not None:
+        parts.append(f"<strong>Suggested size:</strong> {format_multiplier(multiplier)} your normal top-up")
+    if context_note:
+        parts.append(html_lib.escape(context_note))
+    return (
+        '\n                    <div style="font-size: 12px; color: #495057; line-height: 1.4; margin-top: 6px;">'
+        f'{" - ".join(parts)}</div>'
+    )
+
+
 def dispatch_alerts_email(
     alerts: list[TriggeredAlert],
     email_config: AlertEmailConfig,
     confluence_signals: list[DipBuyingSignal] | None = None,
     is_dev: bool = False,
     trimming_signals: list[TrimmingSignal] | None = None,
+    market_context: MarketContext | None = None,
+    suppressed: list[SuppressedSignal] | None = None,
 ) -> bool:
-    """Send a beautifully formatted HTML alert digest via SMTP."""
+    """Send a beautifully formatted HTML alert digest via SMTP.
+
+    ``market_context`` adds a one-line regime banner and ``suppressed`` adds a compact
+    "Suppressed by market regime" list. Leaving both ``None`` gives the original email.
+    A day with only suppressed signals sends nothing.
+    """
     if not email_config.enable:
         log.info("Email alerts are disabled in alerts.yaml. Skipping dispatch.")
         return False
@@ -403,6 +446,7 @@ def dispatch_alerts_email(
                 card_bg = "#f4fafd"
                 
             reasons_str = ", ".join(sig.reasons)
+            note_html = _signal_note_html(sig.multiplier, sig.context_note)
             briefing_html += f"""
                 <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
                     <div style="margin-bottom: 8px;">
@@ -414,7 +458,7 @@ def dispatch_alerts_email(
                     </div>
                     <div style="font-size: 13px; color: #212529; line-height: 1.5; margin-top: 6px; font-style: italic;">
                         <strong>Action Suggestion:</strong> {sig.suggestion}
-                    </div>
+                    </div>{note_html}
                     <div style="margin-top: 12px;">
                         <a href="{sig.groww_link}" target="_blank" style="background-color: #155724; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-block;">
                             🛒 BUY ON GROWW
@@ -450,6 +494,7 @@ def dispatch_alerts_email(
                 card_bg = "#fffdf0"
                 
             reasons_str = ", ".join(sig.reasons)
+            note_html = _signal_note_html(None, sig.context_note)
             briefing_html += f"""
                 <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
                     <div style="margin-bottom: 8px;">
@@ -461,7 +506,7 @@ def dispatch_alerts_email(
                     </div>
                     <div style="font-size: 13px; color: #212529; line-height: 1.5; margin-top: 6px; font-style: italic;">
                         <strong>Action Suggestion:</strong> {sig.suggestion}
-                    </div>
+                    </div>{note_html}
                     <div style="margin-top: 12px;">
                         <a href="{sig.groww_link}" target="_blank" style="background-color: #721c24; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-block;">
                             🛒 TRIM ON GROWW
@@ -533,6 +578,13 @@ def dispatch_alerts_email(
             </div>
         """
 
+    regime_banner_html = ""
+    suppressed_html = ""
+    if market_context is not None or suppressed:
+        from mfhelper.market_regime import render_regime_banner_html, render_suppressed_html
+        regime_banner_html = render_regime_banner_html(market_context)
+        suppressed_html = render_suppressed_html(suppressed)
+
     html_content = f"""
     <html>
     <head>
@@ -544,8 +596,8 @@ def dispatch_alerts_email(
             <p style="color: #495057; line-height: 1.6;">
                 The daily NAV scheduler has successfully completed. Below are the mutual funds that have broken configured technical support levels or buy/sell zones today:
             </p>
-            {briefing_html}
-            {table_html}
+            {regime_banner_html}{briefing_html}
+            {table_html}{suppressed_html}
             <p style="color: #6c757d; font-size: 11px; margin-top: 30px; border-top: 1px solid #dee2e6; padding-top: 15px; line-height: 1.5;">
                 This message was auto-generated by the daily scheduled task of your local MFHelper project. 
                 Alert thresholds and triggers are fully configurable inside your local <code>config/alerts.yaml</code> settings.

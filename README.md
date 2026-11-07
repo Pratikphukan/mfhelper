@@ -14,6 +14,8 @@ Your morning alerts are driven by a **Decision-Making Confluence Engine**. Inste
 * **Tactical Trimming Briefings:** Warns you when funds enter an extreme overbought climax run, advising you to take partial profits and pause SIPs.
 * **Asset-Class Filtering & Conflict Resolution:** Suppresses meaningless "false alarm" technical alerts for stable debt/liquid/arbitrage funds. If indicators contradict (e.g., short-term overbought but long-term discount), it merges them into a smart, consolidated `HOLD` warning.
 
+* **Market Regime Awareness (optional, off by default):** With `regime.enable: true` in `config/alerts.yaml`, buy alerts are gated by the broad market (NIFTY 500 vs its 50/200D SMA plus a 5-day average India VIX) and sized by the Nifty 50 P/E. See [Market regime and valuation context](#market-regime-and-valuation-context).
+
 ### 2. 🗺️ Portfolio Overlap Analyzer (`overlap_main.py`)
 Are you secretly holding multiple mutual funds that invest in the exact same stocks?
 * Computes the **minimum-weight portfolio intersection** between all your funds.
@@ -251,11 +253,39 @@ If you've never done the first OAuth run yet, this is a no-op: just proceed with
 
 ---
 
+## Market regime and valuation context
+
+A fixed "RSI < 45" buy rule means something different in a raging bull market than in a falling one. When `regime.enable: true` is set in `config/alerts.yaml`, the daily run classifies the market and adjusts **buy** alerts accordingly. It is **off by default**, and when off the alert email is byte-for-byte what it was before.
+
+| Regime | Rule (first match wins) | Effect on buy alerts |
+| --- | --- | --- |
+| BEAR | NIFTY 500 below its 200D SMA, and that SMA is lower than 20 sessions ago | Everything is suppressed except **capitulation**: RSI <= 25 *and* 200D SMA discount <= -12% (both required). Capitulation shows as a Tier-3 buy. |
+| CORRECTION | 5-day average India VIX >= 18 (no upper cap) | BUY TIER 1 single-indicator alerts and Tier-1 confluence are suppressed. Tier 2 and 3 pass. |
+| UPTREND | 5-day average VIX < 15 and index above its 50D SMA | Nothing suppressed; Tier-1 dips are sized at 1.5x. |
+| NEUTRAL | anything else, or market data missing / older than 5 days | Alerts unchanged. |
+
+* A new regime only applies after it has held for 3 consecutive sessions, so a single volatile day does not flip your alerts. This is recomputed from recent history on every run, so there is no state file.
+* **Sell, trim, and cross-below alerts are never suppressed by the regime.**
+* The regime applies to every fund that already receives technical alerts (debt, liquid, arbitrage, overnight, and `skip` funds stay excluded). That includes gold and international funds, which follow an Indian-equity regime they do not necessarily track.
+* **Valuation (Nifty 50 P/E):** above 24, trim thresholds fire earlier (RSI -5 points, 52-week windows +2 points) and suggested buy size is halved; below 18, suggested buy size is multiplied by 1.25. The P/E is read from NSE; if NSE cannot be reached, a recent cached value is used, then the manual `valuation.nifty50_pe` value (with a stale warning after 7 days), and if none exists, no valuation adjustment is made.
+* **Suggested size** is text only: Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x of your normal SIP / top-up (see `multipliers:` in the config). Nothing places an order.
+* The email gets a one-line regime banner and a compact "Suppressed by market regime" list. A day where everything was suppressed sends no email.
+
+Check what today's run would use (read-only; touches no sheet and sends no email):
+
+```
+python regime_main.py              # current regime, VIX, valuation
+python regime_main.py --history 15 # plus the last 15 sessions, raw vs. confirmed regime
+```
+
+Market data comes from Yahoo Finance (`^CRSLDX`, `^INDIAVIX`) and is cached in `data/market_context/` (git-ignored, persisted between GitHub Actions runs). If you run the scheduler on GitHub Actions, add the `regime:` block from `config/alerts_example.yaml` to your `ALERTS_YAML` secret. NSE sometimes blocks cloud IP ranges, so set a manual `valuation.nifty50_pe` as a fallback there.
+
 ## Project layout
 
 ```
 MFHelper/
   main.py                        # daily NAV scheduler entry point
+  regime_main.py                 # read-only: show today's market regime / valuation context
   analytics_main.py              # on-demand analytics report CLI
   historical_main.py             # on-demand per-fund N-day drilldown CLI
   backfill_main.py               # one-shot: fill historical Daily NAV rows for one fund

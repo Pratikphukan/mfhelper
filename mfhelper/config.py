@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date, datetime
 import math
 from pathlib import Path
 
@@ -211,9 +212,191 @@ class AlertEmailConfig:
 
 
 @dataclass(frozen=True)
+class RegimeSettings:
+    """Market regime / valuation context (``regime:`` in alerts.yaml). Off by default."""
+
+    enable: bool = False
+
+    # Regime classification (NIFTY 500 + India VIX).
+    index_ticker: str = "^CRSLDX"
+    vix_ticker: str = "^INDIAVIX"
+    vix_low: float = 15.0            # smoothed VIX below this (and index > short SMA) = uptrend
+    vix_high: float = 18.0           # smoothed VIX at/above this = correction
+    vix_smoothing_days: int = 5      # VIX is averaged over this many sessions
+    confirm_days: int = 3            # sessions a new regime must persist before it applies
+    short_sma_days: int = 50
+    long_sma_days: int = 200
+    slope_lookback_days: int = 20    # 200D SMA is "falling" if below its value this many sessions ago
+    max_data_age_days: int = 5       # older market data is treated as unavailable
+
+    # Bear-regime capitulation (replaces Tier 3 while the regime is BEAR).
+    capitulation_rsi: float = 25.0
+    capitulation_sma_discount_pct: float = -12.0
+
+    # Valuation (Nifty 50 P/E).
+    pe_stretched: float = 24.0
+    pe_cheap: float = 18.0
+    pe_manual: float | None = None
+    pe_manual_as_of: date | None = None
+    pe_stale_days: int = 7
+
+    # Suggested buy size, as a multiple of the user's normal SIP/top-up (text only).
+    multiplier_tier1: float = 1.0
+    multiplier_tier2: float = 1.5
+    multiplier_tier3: float = 2.0
+    multiplier_uptrend_tier1: float = 1.5
+    multiplier_cheap_factor: float = 1.25
+    multiplier_stretched_factor: float = 0.5
+
+    # How much earlier trim alerts fire when valuations are stretched.
+    trim_rsi_offset: float = 5.0
+    trim_52w_offset_pts: float = 2.0
+
+
+@dataclass(frozen=True)
 class AlertSettings:
     rules: AlertRulesConfig
     email: AlertEmailConfig
+    regime: RegimeSettings = field(default_factory=RegimeSettings)
+
+
+def _section(raw: dict, key: str, where: str) -> dict:
+    value = raw.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{where}: '{key}' must be a mapping.")
+    return value
+
+
+def _number(
+    raw: dict, key: str, default: float, where: str, *, minimum: float | None = None,
+    maximum: float | None = None, exclusive_minimum: bool = False,
+) -> float:
+    value = raw.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{where}.{key} must be a number (got {value!r}).")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError(f"{where}.{key} must be a finite number (got {value!r}).")
+    if minimum is not None and (number <= minimum if exclusive_minimum else number < minimum):
+        raise ValueError(f"{where}.{key} must be {'>' if exclusive_minimum else '>='} {minimum} (got {number}).")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{where}.{key} must be <= {maximum} (got {number}).")
+    return number
+
+
+def _whole(raw: dict, key: str, default: int, where: str, *, minimum: int = 1) -> int:
+    value = raw.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{where}.{key} must be a whole number (got {value!r}).")
+    if value < minimum:
+        raise ValueError(f"{where}.{key} must be >= {minimum} (got {value}).")
+    return value
+
+
+def _parse_regime(raw: dict, source: str) -> RegimeSettings:
+    if raw is None:
+        return RegimeSettings()
+    if not isinstance(raw, dict):
+        raise ValueError(f"{source}: 'regime' must be a mapping.")
+    where = f"{source}: regime"
+    defaults = RegimeSettings()
+
+    enable = raw.get("enable", defaults.enable)
+    if not isinstance(enable, bool):
+        raise ValueError(f"{where}.enable must be true or false (got {enable!r}).")
+
+    classification = _section(raw, "classification", where)
+    capitulation = _section(raw, "capitulation", where)
+    valuation = _section(raw, "valuation", where)
+    multipliers = _section(raw, "multipliers", where)
+    trimming = _section(raw, "trimming", where)
+
+    cw = f"{where}.classification"
+    vix_low = _number(classification, "vix_low", defaults.vix_low, cw, minimum=0, exclusive_minimum=True)
+    vix_high = _number(classification, "vix_high", defaults.vix_high, cw, minimum=0, exclusive_minimum=True)
+    if vix_low >= vix_high:
+        raise ValueError(f"{cw}: vix_low ({vix_low}) must be lower than vix_high ({vix_high}).")
+    short_sma = _whole(classification, "short_sma_days", defaults.short_sma_days, cw, minimum=2)
+    long_sma = _whole(classification, "long_sma_days", defaults.long_sma_days, cw, minimum=2)
+    if short_sma >= long_sma:
+        raise ValueError(f"{cw}: short_sma_days ({short_sma}) must be lower than long_sma_days ({long_sma}).")
+    index_ticker = str(classification.get("index_ticker", defaults.index_ticker)).strip()
+    vix_ticker = str(classification.get("vix_ticker", defaults.vix_ticker)).strip()
+    if not index_ticker or not vix_ticker:
+        raise ValueError(f"{cw}: index_ticker and vix_ticker must not be empty.")
+
+    kw = f"{where}.capitulation"
+    capitulation_rsi = _number(
+        capitulation, "rsi", defaults.capitulation_rsi, kw, minimum=0, maximum=100, exclusive_minimum=True
+    )
+    capitulation_discount = _number(
+        capitulation, "sma_discount_pct", defaults.capitulation_sma_discount_pct, kw, maximum=0
+    )
+    if capitulation_discount == 0:
+        raise ValueError(f"{kw}.sma_discount_pct must be negative (got 0).")
+
+    vw = f"{where}.valuation"
+    pe_stretched = _number(valuation, "pe_stretched", defaults.pe_stretched, vw, minimum=0, exclusive_minimum=True)
+    pe_cheap = _number(valuation, "pe_cheap", defaults.pe_cheap, vw, minimum=0, exclusive_minimum=True)
+    if pe_cheap >= pe_stretched:
+        raise ValueError(f"{vw}: pe_cheap ({pe_cheap}) must be lower than pe_stretched ({pe_stretched}).")
+    pe_manual = None
+    if valuation.get("nifty50_pe") is not None:
+        pe_manual = _number(valuation, "nifty50_pe", 0.0, vw, minimum=0, exclusive_minimum=True)
+    as_of_raw = valuation.get("nifty50_pe_as_of")
+    pe_as_of: date | None = None
+    if as_of_raw is not None:
+        if isinstance(as_of_raw, datetime):
+            pe_as_of = as_of_raw.date()
+        elif isinstance(as_of_raw, date):
+            pe_as_of = as_of_raw
+        else:
+            try:
+                pe_as_of = date.fromisoformat(str(as_of_raw).strip())
+            except ValueError as exc:
+                raise ValueError(f"{vw}.nifty50_pe_as_of must be a YYYY-MM-DD date (got {as_of_raw!r}).") from exc
+
+    mw = f"{where}.multipliers"
+    tw = f"{where}.trimming"
+    positive = {"minimum": 0, "exclusive_minimum": True}
+    return RegimeSettings(
+        enable=enable,
+        index_ticker=index_ticker,
+        vix_ticker=vix_ticker,
+        vix_low=vix_low,
+        vix_high=vix_high,
+        vix_smoothing_days=_whole(classification, "vix_smoothing_days", defaults.vix_smoothing_days, cw),
+        confirm_days=_whole(classification, "confirm_days", defaults.confirm_days, cw),
+        short_sma_days=short_sma,
+        long_sma_days=long_sma,
+        slope_lookback_days=_whole(classification, "slope_lookback_days", defaults.slope_lookback_days, cw),
+        max_data_age_days=_whole(classification, "max_data_age_days", defaults.max_data_age_days, cw),
+        capitulation_rsi=capitulation_rsi,
+        capitulation_sma_discount_pct=capitulation_discount,
+        pe_stretched=pe_stretched,
+        pe_cheap=pe_cheap,
+        pe_manual=pe_manual,
+        pe_manual_as_of=pe_as_of,
+        pe_stale_days=_whole(valuation, "stale_days", defaults.pe_stale_days, vw),
+        multiplier_tier1=_number(multipliers, "tier1", defaults.multiplier_tier1, mw, **positive),
+        multiplier_tier2=_number(multipliers, "tier2", defaults.multiplier_tier2, mw, **positive),
+        multiplier_tier3=_number(multipliers, "tier3", defaults.multiplier_tier3, mw, **positive),
+        multiplier_uptrend_tier1=_number(
+            multipliers, "uptrend_tier1", defaults.multiplier_uptrend_tier1, mw, **positive
+        ),
+        multiplier_cheap_factor=_number(
+            multipliers, "cheap_factor", defaults.multiplier_cheap_factor, mw, **positive
+        ),
+        multiplier_stretched_factor=_number(
+            multipliers, "stretched_factor", defaults.multiplier_stretched_factor, mw, **positive
+        ),
+        trim_rsi_offset=_number(trimming, "rsi_offset", defaults.trim_rsi_offset, tw, minimum=0, maximum=30),
+        trim_52w_offset_pts=_number(
+            trimming, "dist_52w_offset_pts", defaults.trim_52w_offset_pts, tw, minimum=0, maximum=20
+        ),
+    )
 
 
 def load_alert_settings(path: Path) -> AlertSettings:
@@ -260,4 +443,6 @@ def load_alert_settings(path: Path) -> AlertSettings:
         receiver_email=str(email_raw.get("receiver_email", "")).strip(),
     )
 
-    return AlertSettings(rules=rules, email=email)
+    regime = _parse_regime(raw.get("regime"), str(target_path))
+
+    return AlertSettings(rules=rules, email=email, regime=regime)

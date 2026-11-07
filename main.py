@@ -43,6 +43,8 @@ from mfhelper.mfapi import MfapiResult, fetch_history as mfapi_fetch_history
 from mfhelper.sheets import NavValue, SheetAppender
 from mfhelper.state import LastNavStore, PrevNav
 from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_confluence_signal, resolve_conflicting_alerts, check_trimming_signal
+from mfhelper.market_regime import banner_text, build_market_context
+from mfhelper.regime_filter import apply_regime_to_buys, check_trimming_for_context
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -132,6 +134,15 @@ def run(args: argparse.Namespace) -> int:
 
     nav_store = LastNavStore(LAST_NAV_PATH)
     prev_state = nav_store.load()
+
+    # Market regime / valuation context. Left as None (and every code path below behaves
+    # exactly as before) unless `regime.enable: true` is set in alerts.yaml.
+    regime_cfg = alert_settings.regime
+    market_context = None
+    if regime_cfg.enable:
+        market_context = build_market_context(regime_cfg, cache_dir=DATA_DIR / "market_context")
+        log.info("[REGIME] %s", banner_text(market_context))
+    suppressed_signals = []
 
     all_triggered_alerts = []
     all_confluence_signals = []
@@ -234,9 +245,6 @@ def run(args: argparse.Namespace) -> int:
                 current_dist_200d_sma=dist_200d_sma_pct,
                 rules=alert_settings.rules,
             )
-            if triggered:
-                all_triggered_alerts.extend(triggered)
-                log.info("  [ALERT] Triggered %d indicator alert(s) for %s", len(triggered), fund.code)
 
             # Check for confluence dip-buying opportunities
             confluence = check_confluence_signal(
@@ -247,18 +255,53 @@ def run(args: argparse.Namespace) -> int:
                 current_dist_200d_sma=dist_200d_sma_pct,
                 rules=alert_settings.rules,
             )
+
+            # Gate and size the buy side by market regime (no-op unless enabled)
+            if market_context is not None:
+                decision = apply_regime_to_buys(
+                    market_context,
+                    regime_cfg,
+                    scheme_code=fund.code,
+                    fund_name=display_names[fund.code],
+                    rsi=rsi_value,
+                    dist_200d_sma=dist_200d_sma_pct,
+                    alerts=triggered,
+                    confluence=confluence,
+                )
+                triggered, confluence = decision.alerts, decision.confluence
+                if decision.suppressed:
+                    suppressed_signals.append(decision.suppressed)
+                    log.info(
+                        "  [REGIME] Suppressed %s for %s (%s)",
+                        decision.suppressed.label, fund.code, decision.suppressed.reason,
+                    )
+
+            if triggered:
+                all_triggered_alerts.extend(triggered)
+                log.info("  [ALERT] Triggered %d indicator alert(s) for %s", len(triggered), fund.code)
             if confluence:
                 all_confluence_signals.append(confluence)
                 log.info("  [CONFLUENCE] Triggered Tier-%d buy signal for %s", confluence.tier, fund.code)
 
             # Check for overbought trimming opportunities
-            trim_signal = check_trimming_signal(
-                scheme_code=fund.code,
-                fund_name=display_names[fund.code],
-                current_rsi=rsi_value,
-                current_dist_52w=dist_52w_pct,
-                rules=alert_settings.rules,
-            )
+            if market_context is not None:
+                trim_signal = check_trimming_for_context(
+                    market_context,
+                    regime_cfg,
+                    scheme_code=fund.code,
+                    fund_name=display_names[fund.code],
+                    rsi=rsi_value,
+                    dist_52w=dist_52w_pct,
+                    rules=alert_settings.rules,
+                )
+            else:
+                trim_signal = check_trimming_signal(
+                    scheme_code=fund.code,
+                    fund_name=display_names[fund.code],
+                    current_rsi=rsi_value,
+                    current_dist_52w=dist_52w_pct,
+                    rules=alert_settings.rules,
+                )
             if trim_signal:
                 all_trimming_signals.append(trim_signal)
                 log.info("  [TRIM] Triggered Tier-%d profit-taking/trim signal for %s", trim_signal.tier, fund.code)
@@ -327,7 +370,14 @@ def run(args: argparse.Namespace) -> int:
     resolved_alerts = resolve_conflicting_alerts(all_triggered_alerts)
 
     # Dispatch indicator alerts email digest if any are triggered
-    dispatch_alerts_email(resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev, trimming_signals=all_trimming_signals)
+    if market_context is None:
+        dispatch_alerts_email(resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev, trimming_signals=all_trimming_signals)
+    else:
+        dispatch_alerts_email(
+            resolved_alerts, alert_settings.email, all_confluence_signals, is_dev=args.dev,
+            trimming_signals=all_trimming_signals,
+            market_context=market_context, suppressed=suppressed_signals,
+        )
 
     if fallback_codes:
         log.info(
