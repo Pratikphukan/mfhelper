@@ -85,20 +85,13 @@ def _round_or_blank(value: float | None, digits: int) -> float | str:
 
 
 def _pe_source(context: MarketContext) -> str:
-    valuation = context.valuation
-    if valuation.source is None:
-        return ""
-    when = valuation.as_of.isoformat() if valuation.as_of else "no date"
-    if valuation.source == "nse":
-        return "nse"
-    if valuation.source == "nse_cache":
-        return f"nse_cache ({when})"
-    return f"manual ({when}{', STALE' if valuation.stale else ''})"
+    return "nse" if context.valuation.source == "nse" else ""
 
 
 def build_row(run_timestamp: str, context: MarketContext) -> list[object]:
     """The sheet row for ``context``. Missing numbers are blank cells, never zeros."""
     valuation = context.valuation
+    live_pe = valuation.source == "nse"
     return [
         run_timestamp,
         context.regime.value,
@@ -106,8 +99,8 @@ def build_row(run_timestamp: str, context: MarketContext) -> list[object]:
         _round_or_blank(context.sma_short, 2),
         _round_or_blank(context.sma_long, 2),
         _round_or_blank(context.vix_avg, 2),
-        _round_or_blank(valuation.pe, 1),
-        valuation.state,
+        _round_or_blank(valuation.pe if live_pe else None, 1),
+        valuation.state if live_pe else "unknown",
         _pe_source(context),
         context.as_of.isoformat() if context.as_of else "",
         "; ".join(context.notes),

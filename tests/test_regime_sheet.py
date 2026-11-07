@@ -137,15 +137,15 @@ def test_unavailable_context_gives_blank_numbers_not_zeros():
     "valuation,expected",
     [
         (Valuation(21.0, "fair", source="nse", as_of=AS_OF), "nse"),
-        (Valuation(21.0, "fair", source="nse_cache", as_of=date(2026, 11, 3)), "nse_cache (2026-11-03)"),
-        (Valuation(21.0, "fair", source="manual", as_of=date(2026, 11, 1)), "manual (2026-11-01)"),
-        (Valuation(21.0, "fair", source="manual", as_of=date(2026, 10, 1), stale=True), "manual (2026-10-01, STALE)"),
-        (Valuation(21.0, "fair", source="manual", as_of=None, stale=True), "manual (no date, STALE)"),
+        (Valuation(21.0, "fair", source="manual", as_of=AS_OF), ""),
         (Valuation(None, "unknown"), ""),
     ],
 )
 def test_pe_source_text(valuation, expected):
-    assert build_row("2026-11-06 10:30:02", context(valuation=valuation))[8] == expected
+    row = build_row("2026-11-06 10:30:02", context(valuation=valuation))
+    assert row[8] == expected
+    if expected != "nse":
+        assert row[6:8] == ["", "unknown"]
 
 
 # --- writing --------------------------------------------------------------------------

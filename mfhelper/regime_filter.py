@@ -89,10 +89,10 @@ def size_multiplier(tier: int, context: MarketContext, cfg: RegimeSettings) -> t
 
     valuation = context.valuation
     factor = 1.0
-    if valuation.pe is not None and valuation.state == "cheap":
+    if valuation.source == "nse" and valuation.pe is not None and valuation.state == "cheap":
         factor = cfg.multiplier_cheap_factor
         notes.append(f"Nifty 50 P/E {valuation.pe:.1f} < {cfg.pe_cheap:g}: x{factor:g}")
-    elif valuation.pe is not None and valuation.state == "stretched":
+    elif valuation.source == "nse" and valuation.pe is not None and valuation.state == "stretched":
         factor = cfg.multiplier_stretched_factor
         notes.append(f"Nifty 50 P/E {valuation.pe:.1f} > {cfg.pe_stretched:g}: x{factor:g}")
     return base * factor, "; ".join(notes)
@@ -140,7 +140,7 @@ def check_trimming_for_context(
 ) -> TrimmingSignal | None:
     """Trim check that fires earlier while the Nifty 50 P/E is above ``pe_stretched``."""
     valuation = context.valuation
-    if valuation.pe is None or valuation.state != "stretched":
+    if valuation.source != "nse" or valuation.pe is None or valuation.state != "stretched":
         return check_trimming_signal(scheme_code, fund_name, rsi, dist_52w, rules)
 
     tightened = check_trimming_signal(

@@ -282,7 +282,7 @@ You can turn on either one, both, or neither.
 * The regime follows each day's market. There is no waiting period.
 * The note appears on each BUY TIER row and on the buy briefing cards. Sell, trim, and cross alerts never get a regime note.
 * It applies to every fund that already receives technical alerts (debt, liquid, arbitrage, overnight, and `skip` funds stay excluded). That includes gold and international funds, which follow an Indian-equity regime they do not necessarily track.
-* **Valuation (Nifty 50 P/E):** below 18, suggested buy size is multiplied by 1.25; above 24, it is halved and trim alerts fire earlier (RSI -5 points, 52-week windows +2 points). The only way the set of alerts can change is that earlier trims add alerts. The P/E is read from NSE; if NSE cannot be reached, a recent cached value is used, then the manual `valuation.nifty50_pe` value (with a stale warning after 7 days), and if none exists, no valuation adjustment is made.
+* **Valuation (Nifty 50 P/E):** below 18, suggested buy size is multiplied by 1.25; above 24, it is halved and trim alerts fire earlier (RSI -5 points, 52-week windows +2 points). The only way the set of alerts can change is that earlier trims add alerts. P/E is used only when a valid value is fetched live from NSE. If NSE cannot be reached, P/E is blank in the sheet and no P/E-based size or trim adjustment is applied.
 * **Suggested size** is text only: Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x of your normal SIP / top-up (see `multipliers:` in the config), with Tier-1 at 1.5x in an UPTREND. In CORRECTION and BEAR the normal size is shown next to the warning. Nothing places an order.
 * The email gets a one-line regime banner at the top. As before, an email is only sent on days when at least one alert fires.
 
@@ -298,7 +298,7 @@ With `regime.record_to_sheet: true`, each daily run writes one row to a tab call
 | Short SMA / Long SMA | The 50-day and 200-day averages (defaults; see `classification:` in the config) |
 | VIX (smoothed) | The 5-day average India VIX (default) |
 | Nifty 50 P/E, P/E state | The P/E and cheap / fair / stretched / unknown |
-| P/E source | `nse`, `nse_cache (date)`, or `manual (date[, STALE])` |
+| P/E source | `nse` when a valid live P/E was fetched; blank when unavailable |
 | Market data as of | Date of the latest NIFTY 500 close |
 | Notes | e.g. `no ^INDIAVIX data` when something was missing |
 
@@ -318,7 +318,7 @@ python regime_main.py              # current regime, VIX, valuation
 python regime_main.py --history 15 # plus the regime for each of the last 15 sessions
 ```
 
-Market data comes from Yahoo Finance (`^CRSLDX`, `^INDIAVIX`) and is cached in `data/market_context/` (git-ignored, persisted between GitHub Actions runs). If you run the scheduler on GitHub Actions, add the `regime:` block from `config/alerts_example.yaml` to your `ALERTS_YAML` secret. NSE sometimes blocks cloud IP ranges, so set a manual `valuation.nifty50_pe` as a fallback there.
+Market data comes from Yahoo Finance (`^CRSLDX`, `^INDIAVIX`) and is cached in `data/market_context/` (git-ignored, persisted between GitHub Actions runs). If you run the scheduler on GitHub Actions, add the `regime:` block from `config/alerts_example.yaml` to your `ALERTS_YAML` secret. NSE sometimes blocks cloud IP ranges; when that happens, P/E is left unavailable rather than filled from an older or manual value.
 
 ## Project layout
 

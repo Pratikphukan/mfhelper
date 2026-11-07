@@ -5,8 +5,8 @@
 - [x] Review current alert code, config, and benchmark fetching.
 - [x] Check data availability (VIX and NIFTY 500 via yfinance; P/E via NSE; 10Y via FRED monthly) and measure regime band coverage on 5 years of data.
 - [x] User answers D1-D9 (recorded in `design.md`).
-- [x] User signs off the four "Consequences to confirm" items in `design.md` (all-funds scope, NSE/manual fallback, trimming never suppressed, valuation modifiers).
-- [ ] If NSE P/E is chosen, verify access from GitHub Actions (NSE answered from a local machine on 2026-11-06; GitHub's cloud IPs are untested, so the manual `nifty50_pe` fallback is documented).
+- [x] User signs off the four "Consequences to confirm" items in `design.md` (all-funds scope, live NSE-only valuation per Amendment 6, trimming never suppressed, valuation modifiers).
+- [ ] Verify whether NSE P/E access works from GitHub Actions. If it is blocked, P/E remains blank and no P/E-based adjustment is applied.
 
 ## Implementation (only after approval; subject to chosen options)
 
@@ -38,7 +38,7 @@
 - [x] Wire into `main.py` after the NAV row is written; "(Dev)" tab under `--dev`; failures are warnings only.
 - [x] Tests with a fake worksheet: create, append, same-day replace, header mismatch refusal, unavailable-data row, grow, retry; `main.run` wiring for record-only, advice-only, both, off, failing writer.
 - [x] `pytest tests/` passes. No real sheet was written (fakes only).
-- [ ] User: turn on `regime.record_to_sheet: true` in the `ALERTS_YAML` secret (and a manual `nifty50_pe` fallback), run once with `--dev` to see the "Market Regime (Dev)" tab, then let it run for about a month.
+- [ ] User: turn on `regime.record_to_sheet: true` in the `ALERTS_YAML` secret, run once to see the "Market Regime" tab, then let it run for about a month. If NSE is unreachable, P/E will remain blank.
 - [ ] After a month: review the tab and decide whether to turn on `regime.enable`.
 
 ## Amendment 4 (keep the last 180 days) - approved and implemented
@@ -52,6 +52,14 @@
 - [x] `RegimeSheetWriter(place_after=...)` inserts a new tab right of the NAV tab; existing tabs are not moved; missing neighbour falls back to the end.
 - [x] `main.py` passes the NAV worksheet name it used (including "(Dev)").
 - [x] Tests: next-to placement, dev placement, last-position, missing neighbour, no neighbour, existing tab not moved, `main.run` passes the right name.
+
+## Amendment 6 (live-only P/E) - approved and implemented
+
+- [x] User confirms live-only P/E applies to the sheet and future advice.
+- [x] Use a P/E only when fetched live and valid from NSE; otherwise valuation is unknown, the sheet P/E is blank, and P/E-based adjustments are skipped.
+- [x] Remove P/E cache and manual fallback settings and update the example config and README.
+- [x] Update existing config, market-context, filter, and sheet test cases.
+- [ ] Run the test suite and verify with `--dev` before merging.
 
 ## Follow-up before enabling regime advice
 

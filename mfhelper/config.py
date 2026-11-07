@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
 import math
 from pathlib import Path
 
@@ -247,9 +246,6 @@ class RegimeSettings:
     # Valuation (Nifty 50 P/E).
     pe_stretched: float = 24.0
     pe_cheap: float = 18.0
-    pe_manual: float | None = None
-    pe_manual_as_of: date | None = None
-    pe_stale_days: int = 7
 
     # Suggested buy size, as a multiple of the user's normal SIP/top-up (text only).
     multiplier_tier1: float = 1.0
@@ -362,22 +358,6 @@ def _parse_regime(raw: dict, source: str) -> RegimeSettings:
     pe_cheap = _number(valuation, "pe_cheap", defaults.pe_cheap, vw, minimum=0, exclusive_minimum=True)
     if pe_cheap >= pe_stretched:
         raise ValueError(f"{vw}: pe_cheap ({pe_cheap}) must be lower than pe_stretched ({pe_stretched}).")
-    pe_manual = None
-    if valuation.get("nifty50_pe") is not None:
-        pe_manual = _number(valuation, "nifty50_pe", 0.0, vw, minimum=0, exclusive_minimum=True)
-    as_of_raw = valuation.get("nifty50_pe_as_of")
-    pe_as_of: date | None = None
-    if as_of_raw is not None:
-        if isinstance(as_of_raw, datetime):
-            pe_as_of = as_of_raw.date()
-        elif isinstance(as_of_raw, date):
-            pe_as_of = as_of_raw
-        else:
-            try:
-                pe_as_of = date.fromisoformat(str(as_of_raw).strip())
-            except ValueError as exc:
-                raise ValueError(f"{vw}.nifty50_pe_as_of must be a YYYY-MM-DD date (got {as_of_raw!r}).") from exc
-
     mw = f"{where}.multipliers"
     tw = f"{where}.trimming"
     positive = {"minimum": 0, "exclusive_minimum": True}
@@ -399,9 +379,6 @@ def _parse_regime(raw: dict, source: str) -> RegimeSettings:
         capitulation_sma_discount_pct=capitulation_discount,
         pe_stretched=pe_stretched,
         pe_cheap=pe_cheap,
-        pe_manual=pe_manual,
-        pe_manual_as_of=pe_as_of,
-        pe_stale_days=_whole(valuation, "stale_days", defaults.pe_stale_days, vw),
         multiplier_tier1=_number(multipliers, "tier1", defaults.multiplier_tier1, mw, **positive),
         multiplier_tier2=_number(multipliers, "tier2", defaults.multiplier_tier2, mw, **positive),
         multiplier_tier3=_number(multipliers, "tier3", defaults.multiplier_tier3, mw, **positive),

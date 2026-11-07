@@ -202,8 +202,12 @@ def test_uptrend_and_cheap_stack():
     assert annotate(Regime.UPTREND, [], signal(1), valuation=CHEAP)[1].multiplier == pytest.approx(1.5 * 1.25)
 
 
-def test_unknown_valuation_changes_nothing():
-    out = annotate(Regime.NEUTRAL, [], signal(2), valuation=Valuation(None, "unknown"))[1]
+@pytest.mark.parametrize(
+    "valuation",
+    [Valuation(None, "unknown"), Valuation(17.0, "cheap", source="manual")],
+)
+def test_unavailable_or_non_live_valuation_changes_nothing(valuation):
+    out = annotate(Regime.NEUTRAL, [], signal(2), valuation=valuation)[1]
     assert out.multiplier == 1.5 and out.context_note == ""
 
 
@@ -225,8 +229,11 @@ def trim(valuation, rsi, dist):
     )
 
 
-@pytest.mark.parametrize("valuation", [FAIR, CHEAP, Valuation(None, "unknown")])
-def test_trimming_is_unchanged_unless_valuation_is_stretched(valuation):
+@pytest.mark.parametrize(
+    "valuation",
+    [FAIR, CHEAP, Valuation(None, "unknown"), Valuation(25.0, "stretched", source="manual")],
+)
+def test_trimming_is_unchanged_unless_live_valuation_is_stretched(valuation):
     for rsi, dist in [(62.0, -6.5), (66.0, -4.0), (72.0, -1.5), (80.0, -0.5), (50.0, -10.0)]:
         assert trim(valuation, rsi, dist) == check_trimming_signal("100", "Fund A", rsi, dist, RULES)
 

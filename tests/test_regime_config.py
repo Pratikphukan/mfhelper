@@ -1,4 +1,3 @@
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -39,7 +38,7 @@ regime:
                    short_sma_days: 40, long_sma_days: 150, slope_lookback_days: 10, max_data_age_days: 4,
                    index_ticker: "^NSEI"}
   capitulation: {rsi: 22, sma_discount_pct: -15}
-  valuation: {pe_stretched: 26, pe_cheap: 17, nifty50_pe: 23.5, nifty50_pe_as_of: "2026-11-01", stale_days: 5}
+  valuation: {pe_stretched: 26, pe_cheap: 17}
   multipliers: {tier1: 1.2, tier2: 1.8, tier3: 2.5, uptrend_tier1: 2.0, cheap_factor: 1.5, stretched_factor: 0.25}
   trimming: {rsi_offset: 4, dist_52w_offset_pts: 1.5}
 """
@@ -49,17 +48,19 @@ regime:
     assert (regime.short_sma_days, regime.long_sma_days, regime.slope_lookback_days) == (40, 150, 10)
     assert regime.max_data_age_days == 4 and regime.index_ticker == "^NSEI"
     assert (regime.capitulation_rsi, regime.capitulation_sma_discount_pct) == (22, -15)
-    assert (regime.pe_stretched, regime.pe_cheap, regime.pe_manual) == (26, 17, 23.5)
-    assert regime.pe_manual_as_of == date(2026, 11, 1) and regime.pe_stale_days == 5
+    assert (regime.pe_stretched, regime.pe_cheap) == (26, 17)
     assert (regime.multiplier_tier1, regime.multiplier_tier2, regime.multiplier_tier3) == (1.2, 1.8, 2.5)
     assert (regime.multiplier_uptrend_tier1, regime.multiplier_cheap_factor) == (2.0, 1.5)
     assert regime.multiplier_stretched_factor == 0.25
     assert (regime.trim_rsi_offset, regime.trim_52w_offset_pts) == (4, 1.5)
 
 
-def test_unquoted_yaml_dates_are_accepted(tmp_path):
-    regime = load(tmp_path, "regime:\n  valuation: {nifty50_pe: 21, nifty50_pe_as_of: 2026-11-02}\n").regime
-    assert regime.pe_manual_as_of == date(2026, 11, 2)
+def test_legacy_manual_pe_values_do_not_configure_a_fallback(tmp_path):
+    regime = load(
+        tmp_path,
+        "regime:\n  valuation: {nifty50_pe: 21, nifty50_pe_as_of: 2026-11-02, stale_days: 5}\n",
+    ).regime
+    assert not hasattr(regime, "pe_manual")
 
 
 def test_partial_sections_keep_defaults(tmp_path):
@@ -100,8 +101,6 @@ def test_null_section_is_fine(tmp_path):
         ("regime: {capitulation: {sma_discount_pct: 5}}", "sma_discount_pct must be <= 0"),
         ("regime: {capitulation: {sma_discount_pct: 0}}", "must be negative"),
         ("regime: {valuation: {pe_cheap: 24, pe_stretched: 24}}", "pe_cheap (24.0) must be lower than pe_stretched"),
-        ("regime: {valuation: {nifty50_pe: -1}}", "nifty50_pe must be > 0"),
-        ("regime: {valuation: {nifty50_pe: 20, nifty50_pe_as_of: 'last tuesday'}}", "YYYY-MM-DD"),
         ("regime: {multipliers: {tier2: 0}}", "tier2 must be > 0"),
         ("regime: {multipliers: {stretched_factor: -0.5}}", "stretched_factor must be > 0"),
         ("regime: {trimming: {rsi_offset: -1}}", "rsi_offset must be >= 0"),

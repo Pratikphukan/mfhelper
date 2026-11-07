@@ -60,10 +60,6 @@ regime:
   valuation:
     pe_stretched: 24.0               # above this: trim alerts fire earlier, buy size x stretched_factor
     pe_cheap: 18.0                   # below this: buy size x cheap_factor
-    stale_days: 7
-    # Used only when NSE cannot be reached. Update it from NSE (or any P/E source) if needed.
-    # nifty50_pe: 22.4
-    # nifty50_pe_as_of: "2026-11-06"
 
   multipliers:                       # suggested size as a multiple of your normal SIP / top-up
     tier1: 1.0

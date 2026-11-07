@@ -1,8 +1,5 @@
 from dataclasses import replace
 from datetime import date, timedelta
-import json
-from pathlib import Path
-
 import pytest
 
 from mfhelper import market_regime as mr
@@ -237,58 +234,32 @@ def test_short_history_is_unavailable(tmp_path):
 @pytest.mark.parametrize(
     "pe,state", [(24.01, "stretched"), (24.0, "fair"), (20.0, "fair"), (18.0, "fair"), (17.99, "cheap")]
 )
-def test_valuation_state_boundaries(pe, state, tmp_path):
-    valuation = mr.resolve_valuation(CFG, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: pe)
+def test_valuation_state_boundaries(pe, state):
+    valuation = mr.resolve_valuation(CFG, today=TODAY, fetch_pe=lambda: pe)
     assert valuation.state == state
 
 
-def test_live_value_is_cached_and_used_after_nse_fails(tmp_path):
-    mr.resolve_valuation(CFG, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: 25.5)
-    cached = json.loads((tmp_path / mr.PE_CACHE_FILENAME).read_text())
-    assert cached["pe"] == 25.5 and cached["fetched_on"] == TODAY.isoformat()
-
-    later = TODAY + timedelta(days=3)
-    valuation = mr.resolve_valuation(CFG, cache_dir=tmp_path, today=later, fetch_pe=lambda: None)
-    assert (valuation.pe, valuation.source, valuation.as_of) == (25.5, "nse_cache", TODAY)
-
-
-def test_stale_cache_is_not_used(tmp_path):
-    mr.resolve_valuation(CFG, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: 25.5)
-    later = TODAY + timedelta(days=8)
-    valuation = mr.resolve_valuation(CFG, cache_dir=tmp_path, today=later, fetch_pe=lambda: None)
-    assert valuation.state == "unknown" and valuation.pe is None
-
-
-def test_manual_value_is_the_last_resort(tmp_path):
-    cfg = replace(CFG, pe_manual=26.0, pe_manual_as_of=TODAY - timedelta(days=2))
-    valuation = mr.resolve_valuation(cfg, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: None)
-    assert (valuation.pe, valuation.source, valuation.stale, valuation.state) == (26.0, "manual", False, "stretched")
-
-
-def test_manual_value_flags_staleness(tmp_path):
-    old = replace(CFG, pe_manual=19.0, pe_manual_as_of=TODAY - timedelta(days=8))
-    undated = replace(CFG, pe_manual=19.0)
-    assert mr.resolve_valuation(old, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: None).stale
-    assert mr.resolve_valuation(undated, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: None).stale
-    assert "STALE" in mr.valuation_text(mr.resolve_valuation(old, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: None))
-
-
-def test_live_value_beats_manual_value(tmp_path):
-    cfg = replace(CFG, pe_manual=30.0, pe_manual_as_of=TODAY)
-    valuation = mr.resolve_valuation(cfg, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: 21.0)
+def test_live_value_is_used_without_caching(tmp_path):
+    valuation = mr.resolve_valuation(CFG, today=TODAY, fetch_pe=lambda: 21.0)
     assert (valuation.pe, valuation.source) == (21.0, "nse")
+    assert not (tmp_path / "nifty50_pe.json").exists()
+
+
+def test_failed_live_fetch_does_not_use_a_saved_pe(tmp_path):
+    (tmp_path / "nifty50_pe.json").write_text('{"pe": 25.5, "fetched_on": "2026-11-05"}')
+    valuation = mr.resolve_valuation(CFG, today=TODAY, fetch_pe=lambda: None)
+    assert valuation == mr.UNKNOWN_VALUATION
 
 
 @pytest.mark.parametrize("bad", [None, 0.0, -3.0, 4.9, 100.1, float("nan"), "n/a"])
-def test_implausible_live_values_are_rejected(bad, tmp_path):
-    valuation = mr.resolve_valuation(CFG, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: bad)
+def test_implausible_live_values_are_rejected(bad):
+    valuation = mr.resolve_valuation(CFG, today=TODAY, fetch_pe=lambda: bad)
     assert valuation.pe is None
 
 
-def test_corrupt_cache_is_ignored(tmp_path):
-    (tmp_path / mr.PE_CACHE_FILENAME).write_text("{not json")
-    valuation = mr.resolve_valuation(CFG, cache_dir=tmp_path, today=TODAY, fetch_pe=lambda: None)
-    assert valuation.state == "unknown"
+def test_live_value_becomes_unknown_when_fetch_fails():
+    valuation = mr.resolve_valuation(CFG, today=TODAY, fetch_pe=lambda: None)
+    assert valuation == mr.UNKNOWN_VALUATION
 
 
 class _FakeResponse:

@@ -26,7 +26,6 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
 import html
-import json
 import logging
 from pathlib import Path
 from typing import Callable
@@ -41,7 +40,6 @@ HISTORY_CALENDAR_DAYS = 800
 
 NSE_HOME_URL = "https://www.nseindia.com"
 NSE_ALL_INDICES_URL = "https://www.nseindia.com/api/allIndices"
-PE_CACHE_FILENAME = "nifty50_pe.json"
 # Sanity band: anything outside this is a parsing problem, not a valuation.
 PE_PLAUSIBLE_RANGE = (5.0, 100.0)
 
@@ -65,9 +63,8 @@ REGIME_STANCE = {
 class Valuation:
     pe: float | None
     state: str  # "stretched" | "cheap" | "fair" | "unknown"
-    source: str | None = None  # "nse" | "nse_cache" | "manual"
+    source: str | None = None  # "nse" when fetched live; None when unavailable
     as_of: date | None = None
-    stale: bool = False
 
 
 @dataclass(frozen=True)
@@ -157,8 +154,8 @@ def read_regime(
 def fetch_nifty50_pe_from_nse(timeout: float = 15.0) -> float | None:
     """Best-effort read of the Nifty 50 P/E from NSE's public ``allIndices`` endpoint.
 
-    NSE needs a cookie from the home page first and may block some networks, so any
-    failure returns ``None`` and the caller falls back to cache / manual config.
+    NSE needs a cookie from the home page first and may block some networks. Any
+    failure returns ``None``; the caller then marks valuation unavailable.
     """
     try:
         import requests
@@ -194,29 +191,6 @@ def _plausible_pe(value: object) -> float | None:
     return pe if low <= pe <= high else None
 
 
-def _read_pe_cache(path: Path) -> tuple[float, date] | None:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        pe = _plausible_pe(raw["pe"])
-        fetched_on = date.fromisoformat(raw["fetched_on"])
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    return (pe, fetched_on) if pe is not None else None
-
-
-def _write_pe_cache(path: Path, pe: float, fetched_on: date) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(
-            json.dumps({"pe": pe, "fetched_on": fetched_on.isoformat(), "source": "nse"}, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        tmp.replace(path)
-    except OSError as exc:
-        log.warning("Could not write P/E cache %s: %s", path, exc)
-
-
 def _valuation_state(pe: float, cfg: RegimeSettings) -> str:
     if pe > cfg.pe_stretched:
         return "stretched"
@@ -228,30 +202,13 @@ def _valuation_state(pe: float, cfg: RegimeSettings) -> str:
 def resolve_valuation(
     cfg: RegimeSettings,
     *,
-    cache_dir: Path,
     today: date,
     fetch_pe: Callable[[], float | None] = fetch_nifty50_pe_from_nse,
 ) -> Valuation:
-    """Live NSE value, else a recent cached NSE value, else the manual config value, else unknown."""
-    cache_path = cache_dir / PE_CACHE_FILENAME
-
+    """Use only a valid live NSE value; otherwise return unknown valuation."""
     live = _plausible_pe(fetch_pe())
     if live is not None:
-        _write_pe_cache(cache_path, live, today)
         return Valuation(live, _valuation_state(live, cfg), source="nse", as_of=today)
-
-    cached = _read_pe_cache(cache_path)
-    if cached is not None:
-        pe, fetched_on = cached
-        if (today - fetched_on).days <= cfg.pe_stale_days:
-            return Valuation(pe, _valuation_state(pe, cfg), source="nse_cache", as_of=fetched_on)
-
-    if cfg.pe_manual is not None:
-        stale = cfg.pe_manual_as_of is None or (today - cfg.pe_manual_as_of).days > cfg.pe_stale_days
-        return Valuation(
-            cfg.pe_manual, _valuation_state(cfg.pe_manual, cfg), source="manual",
-            as_of=cfg.pe_manual_as_of, stale=stale,
-        )
     return UNKNOWN_VALUATION
 
 
@@ -310,7 +267,7 @@ def build_market_context(
     """Build today's market context. Never raises; failures yield NEUTRAL with a note."""
     today = today or date.today()
     try:
-        valuation = resolve_valuation(cfg, cache_dir=cache_dir, today=today, fetch_pe=fetch_pe)
+        valuation = resolve_valuation(cfg, today=today, fetch_pe=fetch_pe)
     except Exception as exc:
         log.warning("Valuation lookup failed: %s", exc)
         valuation = UNKNOWN_VALUATION
@@ -357,17 +314,9 @@ def build_market_context(
 
 
 def valuation_text(valuation: Valuation) -> str:
-    if valuation.pe is None:
+    if valuation.source != "nse" or valuation.pe is None:
         return "Nifty 50 P/E unavailable"
-    text = f"Nifty 50 P/E {valuation.pe:.1f} ({valuation.state})"
-    if valuation.source == "manual":
-        when = valuation.as_of.isoformat() if valuation.as_of else "no date"
-        text += f", manual value as of {when}"
-        if valuation.stale:
-            text += " - STALE, please update"
-    elif valuation.source == "nse_cache" and valuation.as_of:
-        text += f", cached {valuation.as_of.isoformat()}"
-    return text
+    return f"Nifty 50 P/E {valuation.pe:.1f} ({valuation.state})"
 
 
 def banner_text(context: MarketContext) -> str:

@@ -1,6 +1,6 @@
 # Design: Market Regime-Aware Signals
 
-**Status: D1-D9 answered by the user (see below). Awaiting explicit sign-off on the points under "Consequences to confirm" before any code is written.**
+**Status: D1-D9 answered; Amendments 1-6 approved. Amendment 6 is implemented in code; its test suite still needs to be run.**
 
 ## Recorded Answers
 
@@ -13,13 +13,13 @@
 | D5 | Suppressed alerts | **A.** Not sent as alerts; listed in a compact "Suppressed by market regime" email section |
 | D6 | Buy multipliers | **A.** Text-only suggested multipliers (Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x) with regime and valuation modifiers, configurable |
 | D7 | Tighten trimming | **A.** At P/E > 24 relax trim thresholds (RSI -5 points, 52W distance +2 points), configurable |
-| D8 | Valuation | **A.** P/E thresholds (24 / 18) as trigger; NSE fetch with manual config fallback |
+| D8 | Valuation | **A.** P/E thresholds (24 / 18) as trigger; live NSE P/E only (manual and cache fallback removed by Amendment 6) |
 | D9 | Rollout | **A.** `regime.enable` defaults to false; one-line regime banner in the email; no MCP tool yet |
 
 ## Consequences to confirm
 
 1. **D3 = all funds.** The regime is computed from NIFTY 500 and India VIX, so it will also gate gold, commodity, and international funds that already receive technical alerts. Example: in a BEAR regime, a gold fund's Tier-1/2/3 dip alerts would be suppressed unless it also meets RSI <= 25 and 200D <= -12%, even if gold is unrelated to the Indian equity downtrend. Debt/liquid/arbitrage/overnight/skip funds are still excluded as today. **[CONFIRM]** or switch to equity-only (or add a per-fund override).
-2. **D8 = NSE with manual fallback.** NSE access works from this machine but is unverified from GitHub Actions. If CI is blocked, the daily run uses `valuation.nifty50_pe` from config (stale warning after N days, proposed 7); if neither is available, valuation is "unknown" and neither tightening nor buy expansion is applied. **[CONFIRM]**
+2. **D8 = live NSE only (Amendment 6).** Earlier design text below describes the original manual fallback proposal; the approved current behavior is that an unavailable live value means unknown valuation and no P/E-based adjustments.
 3. **D4 in BEAR also covers the trimming side?** Not specified. Proposed: trimming signals are never suppressed by the regime (only buy signals are gated); only valuation (D7) changes trimming. **[CONFIRM]**
 4. **Valuation modifiers apply independent of regime.** P/E > 24 halves buy multipliers (0.5x) and tightens trims; P/E < 18 multiplies buy multipliers by 1.25. In BEAR, only capitulation signals exist, so the multiplier applies to those. **[CONFIRM]**
 
@@ -83,7 +83,7 @@ A test runs the same inputs with the feature off and on, in every regime, and as
 | F | VIX (5-day avg) | 2 decimals |
 | G | Nifty 50 P/E | 1 decimal |
 | H | P/E state | cheap / fair / stretched / unknown |
-| I | P/E source | `nse`, `nse_cache (date)`, `manual (date, STALE)`, or blank |
+| I | P/E source | `nse` for a valid live value, or blank when unavailable (Amendment 6) |
 | J | Market data as of | date of the latest NIFTY 500 close |
 | K | Notes | e.g. `no ^INDIAVIX data`, `^CRSLDX data is 7 days old` |
 
@@ -256,9 +256,9 @@ Pick the primary rule:
 
 Source for P/E:
 
-- S1. **NSE `allIndices` API**, fetched daily and cached (works here; may be blocked from GitHub Actions, in which case it falls back below).
+- S1. **NSE `allIndices` API**, fetched live each run (works here; may be blocked from GitHub Actions).
 - S2. **Manual value in config** (`valuation.nifty50_pe`) that you update yourself, with a "stale after N days" warning. Always works, never automatic.
-- S3. S1 with automatic fallback to S2. **Proposed.**
+- S3. S1 with automatic fallback to S2. **Original proposal; superseded by Amendment 6.**
 - S4. Skip valuation in the first release and ship the regime filter only.
 
 Source for the 10Y yield, if used: FRED monthly (lagging, free), or the manual config value. Intraday precision is not needed for a context note.
@@ -297,3 +297,7 @@ class MarketContext:
 - Development runs use `--dev` and sandbox sheets only. No live emails or production sheets.
 - Verify that with `regime.enable: false` the alert output is byte-for-byte the same as today.
 - Compare the regime history against real data (VIX and NIFTY 500 are free for 15+ years) to report how many days each regime would have been active and how many alerts it would have suppressed. P/E has no free history, so valuation cannot be back-tested.
+
+## 6. Amendment 6: live-only P/E (approved)
+
+The user approved using live-only P/E for both sheet recording and future advice. A valid NSE value may be used for that run. If NSE is unavailable or returns an invalid value, valuation is unknown, the sheet leaves P/E blank, and no P/E-based size or trim adjustment is applied. Cached and manually entered P/E values are not used.
