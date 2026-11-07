@@ -3,7 +3,8 @@
 One row per run date: the market regime and the numbers behind it. The tab is separate from
 the Daily NAV tab and never touches it. Rules:
 
-* The tab and its header are created if missing.
+* The tab and its header are created if missing. A new tab is placed immediately to the right of
+  the Daily NAV tab (``place_after``); an existing tab is never moved.
 * If the tab already has a *different* header, nothing is written (``RegimeSheetError``), so
   someone else's data is never overwritten.
 * A re-run on the same date replaces that date's row; other rows are never rewritten.
@@ -121,8 +122,10 @@ class RegimeSheetWriter:
         credentials_path: Path,
         token_path: Path,
         keep_days: int = DEFAULT_KEEP_DAYS,
+        place_after: str | None = None,
     ) -> None:
         self._keep_days = keep_days
+        self._place_after = place_after
         self._spreadsheet_id = spreadsheet_id
         self._worksheet_name = worksheet_name
         self._credentials_path = credentials_path
@@ -155,10 +158,25 @@ class RegimeSheetWriter:
         try:
             ws = spreadsheet.worksheet(self._worksheet_name)
         except gspread.WorksheetNotFound:
-            log.info("Worksheet %r not found; creating", self._worksheet_name)
-            ws = spreadsheet.add_worksheet(title=self._worksheet_name, rows=1000, cols=len(HEADERS))
+            index = self._index_after(spreadsheet)
+            log.info("Worksheet %r not found; creating at position %s", self._worksheet_name,
+                     "end" if index is None else index)
+            ws = spreadsheet.add_worksheet(
+                title=self._worksheet_name, rows=1000, cols=len(HEADERS), index=index
+            )
         self._worksheet = ws
         return ws
+
+    def _index_after(self, spreadsheet) -> int | None:
+        """Tab position just right of ``place_after``, or ``None`` (end of the tab bar) if unknown."""
+        if not self._place_after:
+            return None
+        try:
+            return spreadsheet.worksheet(self._place_after).index + 1
+        except Exception as exc:  # the neighbour is missing or unreadable: placement is cosmetic
+            log.info("Could not find tab %r to place %r next to it: %s", self._place_after,
+                     self._worksheet_name, exc)
+            return None
 
     def _ensure_header(self, ws: gspread.Worksheet) -> None:
         existing = [str(cell).strip() for cell in self._run_with_retry(lambda: ws.row_values(1))]

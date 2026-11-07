@@ -46,3 +46,9 @@
 - [x] `regime.sheet_keep_days` (default 180) with validation, example config, README.
 - [x] `stale_row_ranges()` + `RegimeSheetWriter._trim()`; header, today's row, non-date rows and other tabs are never removed; trim failure is a warning.
 - [x] Tests: boundary (179 kept / 180 removed), grouping, header safety, non-date rows, today's row with a tiny limit, same-day replace, other tabs untouched, trim failure, config validation, wiring.
+
+## Amendment 5 (tab next to Daily NAV) - approved and implemented
+
+- [x] `RegimeSheetWriter(place_after=...)` inserts a new tab right of the NAV tab; existing tabs are not moved; missing neighbour falls back to the end.
+- [x] `main.py` passes the NAV worksheet name it used (including "(Dev)").
+- [x] Tests: next-to placement, dev placement, last-position, missing neighbour, no neighbour, existing tab not moved, `main.run` passes the right name.

@@ -302,6 +302,7 @@ With `regime.record_to_sheet: true`, each daily run writes one row to a tab call
 | Market data as of | Date of the latest NIFTY 500 close |
 | Notes | e.g. `no ^INDIAVIX data` when something was missing |
 
+* The tab is created **right next to the Daily NAV tab** (immediately to its right). Only a newly created tab is placed; if you later drag it elsewhere, it stays where you put it.
 * It is written every day the switch is on, whether or not any alert fires, and no email is involved.
 * A re-run on the same date **replaces** that date's row. Other rows are never rewritten.
 * Rows older than `regime.sheet_keep_days` (default **180** days) are removed from this tab after each write. The header row, today's row, and any row whose first cell is not a date are never removed, and no other tab is touched.

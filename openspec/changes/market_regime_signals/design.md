@@ -122,6 +122,14 @@ Changes to Amendment 2 and the earlier design:
 - A failed trim is a warning only; the day's row is already written.
 - Cost: the extra column read and delete calls are the same pattern the Daily NAV tab already uses.
 
+## Amendment 5: put the Market Regime tab next to the Daily NAV tab (APPROVED by the user on 2026-11-07, implemented)
+
+**User request:** "Market Regime tab should be next to the DAILY NAV sheet."
+
+- A newly created tab is inserted immediately to the right of the Daily NAV tab the run wrote to ("Sheet1" normally, "Sheet1 (Dev)" under `--dev`).
+- An existing tab is never moved, so a tab the user has dragged elsewhere stays there.
+- If the NAV tab cannot be found, the tab is added at the end instead (placement is cosmetic and never fails the write).
+
 ## 1. Where this fits in the current code
 
 - `main.py` computes per-fund `rsi`, `dist_52w_pct`, `dist_200d_sma_pct`, then calls `check_fund_alerts`, `check_confluence_signal` (Tier 1-3 buy, 2-of-3 rules) and `check_trimming_signal` (Trim Tier 1-3). Everything is collected and sent by `dispatch_alerts_email`.

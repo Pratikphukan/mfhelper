@@ -56,8 +56,9 @@ class FakeRegimeWriter:
     created: list["FakeRegimeWriter"] = []
     fail = False
 
-    def __init__(self, *, spreadsheet_id, worksheet_name, credentials_path, token_path, keep_days):
+    def __init__(self, *, spreadsheet_id, worksheet_name, credentials_path, token_path, keep_days, place_after):
         self.keep_days = keep_days
+        self.place_after = place_after
         self.spreadsheet_id = spreadsheet_id
         self.worksheet_name = worksheet_name
         self.recorded: list[tuple[str, MarketContext]] = []
@@ -326,3 +327,15 @@ def test_the_keep_days_setting_reaches_the_writer(harness):
     harness.state["context"] = ctx(Regime.NEUTRAL)
     harness.run()
     assert FakeRegimeWriter.created[0].keep_days == 90
+
+
+def test_the_regime_tab_is_placed_next_to_the_nav_tab_that_the_run_used(harness):
+    harness.state["alert_settings"] = harness.settings_for(RegimeSettings(record_to_sheet=True))
+    harness.state["context"] = ctx(Regime.NEUTRAL)
+    harness.run()  # --dev
+    assert FakeRegimeWriter.created[0].place_after == "Sheet1 (Dev)"
+
+    FakeRegimeWriter.created.clear()
+    assert main_module.run(SimpleNamespace(dev=False)) == 0  # everything is faked, nothing real is written
+    assert FakeRegimeWriter.created[0].place_after == "Sheet1"
+    assert FakeRegimeWriter.created[0].worksheet_name == "Market Regime"

@@ -36,6 +36,8 @@ class FakeSpreadsheetApi:
 
 
 class FakeWorksheet:
+    index = 0
+
     def __init__(self, rows=None, row_count=1000):
         self.rows: list[list] = [list(r) for r in (rows or [])]
         self.row_count = row_count
@@ -72,26 +74,41 @@ class FakeSpreadsheet:
     def __init__(self, tabs=None):
         self.tabs: dict[str, FakeWorksheet] = dict(tabs or {})
         self.added: list[str] = []
+        self.added_index: list = []
+        self._renumber()
+
+    def _renumber(self):
+        for position, ws in enumerate(self.tabs.values()):
+            ws.index = position
+
+    def order(self) -> list[str]:
+        return list(self.tabs)
 
     def worksheet(self, name):
         if name not in self.tabs:
             raise gspread.WorksheetNotFound(name)
         return self.tabs[name]
 
-    def add_worksheet(self, title, rows, cols):
+    def add_worksheet(self, title, rows, cols, index=None):
         self.added.append(title)
-        self.tabs[title] = FakeWorksheet(row_count=rows)
-        return self.tabs[title]
+        self.added_index.append(index)
+        names = list(self.tabs)
+        names.insert(len(names) if index is None else index, title)
+        created = FakeWorksheet(row_count=rows)
+        self.tabs = {name: (created if name == title else self.tabs[name]) for name in names}
+        self._renumber()
+        return created
 
 
 @pytest.fixture
 def writer_for(monkeypatch):
-    def make(tabs=None, name="Market Regime", keep_days=180):
+    def make(tabs=None, name="Market Regime", keep_days=180, place_after=None):
         spreadsheet = FakeSpreadsheet(tabs)
         monkeypatch.setattr(rs, "_load_credentials", lambda *_a: object())
         monkeypatch.setattr(rs.gspread, "authorize", lambda _c: Mock(open_by_key=lambda _id: spreadsheet))
         monkeypatch.setattr(rs.time, "sleep", lambda _s: None)
-        return RegimeSheetWriter("sheet-id", name, Path("c.json"), Path("t.json"), keep_days=keep_days), spreadsheet
+        return RegimeSheetWriter("sheet-id", name, Path("c.json"), Path("t.json"), keep_days=keep_days,
+                                   place_after=place_after), spreadsheet
 
     return make
 
@@ -204,8 +221,8 @@ def test_formatting_failure_does_not_stop_the_data_write(writer_for):
     writer, spreadsheet = writer_for()
     original_add = spreadsheet.add_worksheet
 
-    def add_with_broken_formatting(title, rows, cols):
-        ws = original_add(title, rows, cols)
+    def add_with_broken_formatting(title, rows, cols, index=None):
+        ws = original_add(title, rows, cols, index=index)
         ws.spreadsheet.fail = True
         return ws
 
@@ -340,3 +357,49 @@ def test_no_trimming_happens_when_the_header_is_foreign(writer_for):
     with pytest.raises(RegimeSheetError):
         writer.record("2026-11-06 10:30:02", context())
     assert ws.deleted == [] and len(ws.rows) == 2
+
+
+# --- tab position ---------------------------------------------------------------------
+
+
+def nav_tabs():
+    return {"Notes": FakeWorksheet(), "Sheet1": FakeWorksheet(), "Other": FakeWorksheet()}
+
+
+def test_a_new_tab_goes_right_next_to_the_daily_nav_tab(writer_for):
+    writer, spreadsheet = writer_for(nav_tabs(), place_after="Sheet1")
+    writer.record("2026-11-06 10:30:02", context())
+    assert spreadsheet.order() == ["Notes", "Sheet1", "Market Regime", "Other"]
+    assert spreadsheet.added_index == [2]
+
+
+def test_the_dev_tab_goes_next_to_the_dev_nav_tab(writer_for):
+    tabs = {"Sheet1": FakeWorksheet(), "Sheet1 (Dev)": FakeWorksheet(), "Other": FakeWorksheet()}
+    writer, spreadsheet = writer_for(tabs, name="Market Regime (Dev)", place_after="Sheet1 (Dev)")
+    writer.record("2026-11-06 10:30:02", context())
+    assert spreadsheet.order() == ["Sheet1", "Sheet1 (Dev)", "Market Regime (Dev)", "Other"]
+
+
+def test_nav_tab_in_the_last_position_puts_the_new_tab_last(writer_for):
+    writer, spreadsheet = writer_for({"Other": FakeWorksheet(), "Sheet1": FakeWorksheet()}, place_after="Sheet1")
+    writer.record("2026-11-06 10:30:02", context())
+    assert spreadsheet.order() == ["Other", "Sheet1", "Market Regime"]
+
+
+def test_a_missing_neighbour_tab_falls_back_to_the_end(writer_for):
+    writer, spreadsheet = writer_for(nav_tabs(), place_after="No such tab")
+    writer.record("2026-11-06 10:30:02", context())
+    assert spreadsheet.order()[-1] == "Market Regime" and spreadsheet.added_index == [None]
+
+
+def test_without_a_neighbour_the_tab_goes_to_the_end(writer_for):
+    writer, spreadsheet = writer_for(nav_tabs())
+    writer.record("2026-11-06 10:30:02", context())
+    assert spreadsheet.order()[-1] == "Market Regime" and spreadsheet.added_index == [None]
+
+
+def test_an_existing_tab_is_never_moved(writer_for):
+    tabs = {"Market Regime": FakeWorksheet(rows=[list(HEADERS)]), "Sheet1": FakeWorksheet(), "Other": FakeWorksheet()}
+    writer, spreadsheet = writer_for(tabs, place_after="Sheet1")
+    writer.record("2026-11-06 10:30:02", context())
+    assert spreadsheet.order() == ["Market Regime", "Sheet1", "Other"] and spreadsheet.added == []

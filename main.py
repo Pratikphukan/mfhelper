@@ -364,6 +364,7 @@ def run(args: argparse.Namespace) -> int:
                 credentials_path=CREDENTIALS_PATH,
                 token_path=TOKEN_PATH,
                 keep_days=regime_cfg.sheet_keep_days,
+                place_after=worksheet_name,  # next to the Daily NAV tab this run wrote to
             ).record(run_timestamp, market_context)
         except Exception as exc:
             log.warning("Could not record the market regime to tab %r: %s", regime_tab, exc)
