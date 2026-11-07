@@ -30,3 +30,8 @@ gcp-credentials.json
 check.py
 _site/
 index.html
+
+# Vercel importer
+node_modules/
+.vercel/
+deploy/vercel/web/mfhelper/
