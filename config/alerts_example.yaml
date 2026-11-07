@@ -29,3 +29,46 @@ email:
   sender_email: "your_email@gmail.com"
   sender_password: ""                # Leave blank to load from EMAIL_PASSWORD environment variable
   receiver_email: "receiver_email@gmail.com"
+
+# Market regime and valuation context (optional, everything OFF by default).
+# Two independent switches:
+#   record_to_sheet  records one row per daily run in its own Google Sheet tab. It never changes
+#                    an alert or an email, so it is safe to turn on first and watch for a while.
+#   enable           adds a short note about the broad market (NIFTY 500 + India VIX) and a
+#                    suggested size from the Nifty 50 P/E to buy alerts. Advice only: no alert is
+#                    ever removed or hidden.
+# Run `python regime_main.py` to see what the daily run would use today.
+regime:
+  enable: false
+  record_to_sheet: false
+  sheet_name: "Market Regime"        # tab in your spreadsheet; "(Dev)" is added under --dev
+  sheet_keep_days: 180               # rows older than this are removed from that tab (never the header)
+
+  classification:                    # first match wins: BEAR, CORRECTION, UPTREND, else NEUTRAL
+    vix_low: 15.0                    # UPTREND: smoothed VIX below this and index above its 50D SMA
+    vix_high: 18.0                   # CORRECTION: smoothed VIX at or above this (no upper cap)
+    vix_smoothing_days: 5            # VIX is averaged over this many sessions
+    short_sma_days: 50
+    long_sma_days: 200               # BEAR: index below it and it is lower than slope_lookback_days ago
+    slope_lookback_days: 20
+    max_data_age_days: 5             # older market data is ignored (regime falls back to NEUTRAL)
+
+  capitulation:                      # BEAR only: a buy meeting both is tagged CAPITULATION
+    rsi: 25.0
+    sma_discount_pct: -12.0
+
+  valuation:
+    pe_stretched: 24.0               # above this: trim alerts fire earlier, buy size x stretched_factor
+    pe_cheap: 18.0                   # below this: buy size x cheap_factor
+
+  multipliers:                       # suggested size as a multiple of your normal SIP / top-up
+    tier1: 1.0
+    tier2: 1.5
+    tier3: 2.0
+    uptrend_tier1: 1.5
+    cheap_factor: 1.25
+    stretched_factor: 0.5
+
+  trimming:                          # applied while P/E is stretched
+    rsi_offset: 5.0                  # RSI trim thresholds drop by this many points
+    dist_52w_offset_pts: 2.0         # 52-week windows widen by this many points
