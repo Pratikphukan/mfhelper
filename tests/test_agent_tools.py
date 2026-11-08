@@ -168,6 +168,90 @@ def test_fetch_category_rankings_not_found(tmp_path):
     assert "not found" in res["message"]
 
 
+def test_category_with_empty_public_template_gives_a_clear_error(tmp_path):
+    (tmp_path / "large_and_midcap.yaml").write_text("funds: []\n")
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path):
+        res = fetch_category_rankings("large_and_midcap")
+    assert res["status"] == "error"
+    assert "Could not load category 'large_and_midcap'" in res["message"]
+    assert "No funds configured" in res["message"]
+    assert "large_and_midcap.private.yaml" in res["message"]
+    assert "not found" not in res["message"]
+
+
+def test_category_with_empty_private_file_names_the_private_file(tmp_path):
+    (tmp_path / "large_and_midcap.yaml").write_text("funds: []\n")
+    (tmp_path / "large_and_midcap.private.yaml").write_text("funds: []\n")
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path):
+        res = fetch_category_rankings("large_and_midcap")
+    assert res["status"] == "error"
+    assert "from large_and_midcap.private.yaml" in res["message"]
+    assert "No funds configured" in res["message"]
+    assert "copy it to" not in res["message"]  # hint is only for the public template
+
+
+def test_category_with_broken_yaml_shows_the_real_error(tmp_path):
+    (tmp_path / "midcap.yaml").write_text("funds:\n  - name: 'No code here'\n")
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path):
+        res = fetch_category_rankings("midcap")
+    assert res["status"] == "error"
+    assert "missing 'code'" in res["message"]
+
+
+def test_broken_category_file_does_not_fall_back_to_funds_yaml(tmp_path):
+    (tmp_path / "midcap.yaml").write_text("funds: []\n")
+    (tmp_path / "funds.yaml").write_text(
+        "funds:\n  - code: '1001'\n    name: 'Tagged Fund'\n    category: midcap\n"
+    )
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path), \
+         patch("mfhelper.agent_tools.fetch_history") as fetch:
+        res = fetch_category_rankings("midcap")
+    assert res["status"] == "error"
+    fetch.assert_not_called()
+
+
+def test_missing_category_file_still_falls_back_to_funds_yaml_tags(tmp_path):
+    (tmp_path / "funds.yaml").write_text(
+        "funds:\n  - code: '1001'\n    name: 'Tagged Fund'\n    category: midcap\n"
+    )
+    res_1 = MfapiResult(scheme_name="Tagged Fund", history=_make_dummy_history(400, 100.0))
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path), \
+         patch("mfhelper.agent_tools.fetch_history", return_value=res_1):
+        res = fetch_category_rankings("midcap")
+    assert res["status"] == "success"
+    assert res["count"] == 1
+
+
+def test_private_file_is_used_over_the_public_template(tmp_path):
+    (tmp_path / "large_and_midcap.yaml").write_text("funds: []\n")
+    (tmp_path / "large_and_midcap.private.yaml").write_text("funds:\n  - code: '2001'\n    name: 'Mine'\n")
+    res_1 = MfapiResult(scheme_name="Mine", history=_make_dummy_history(400, 100.0))
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path), \
+         patch("mfhelper.agent_tools.fetch_history", return_value=res_1):
+        res = fetch_category_rankings("large_and_midcap")
+    assert res["status"] == "success"
+    assert res["rankings"][0]["code"] == "2001"
+
+
+def test_private_file_alone_is_found_without_a_public_file(tmp_path):
+    (tmp_path / "large_and_midcap.private.yaml").write_text("funds:\n  - code: '2001'\n    name: 'Mine'\n")
+    res_1 = MfapiResult(scheme_name="Mine", history=_make_dummy_history(400, 100.0))
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path), \
+         patch("mfhelper.agent_tools.fetch_history", return_value=res_1):
+        res = fetch_category_rankings("large_and_midcap")
+    assert res["status"] == "success"
+
+
+def test_private_files_are_not_listed_as_separate_categories(tmp_path):
+    (tmp_path / "midcap.yaml").write_text("funds: []\n")
+    (tmp_path / "other.private.yaml").write_text("funds: []\n")
+    with patch("mfhelper.agent_tools.CONFIG_DIR", tmp_path):
+        res = fetch_category_rankings("nonexistent_cat")
+    assert res["status"] == "error"
+    assert "midcap" in res["message"]
+    assert "private" not in res["message"]
+
+
 def test_fetch_category_rankings_success(tmp_path):
     cat_yaml = tmp_path / "flexicap.yaml"
     cat_yaml.write_text("funds:\n  - code: '1001'\n    name: 'Fund 1'\n  - code: '1002'\n    name: 'Fund 2'\n")

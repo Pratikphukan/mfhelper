@@ -331,11 +331,22 @@ def fetch_category_rankings(category: str) -> dict[str, Any]:
 
     funds_to_analyze = []
 
-    if cat_file.exists():
+    # A private override counts even when the public file is missing.
+    resolved_file = resolve_config_path(cat_file)
+    if resolved_file.exists():
         try:
             funds_to_analyze = load_funds(cat_file)
         except Exception as e:
-            log.warning("Could not load category file %s: %s", cat_file, e)
+            # The file exists but is broken. Say so, instead of pretending the category is missing
+            # or quietly ranking other funds.
+            log.warning("Could not load category file %s: %s", resolved_file, e)
+            message = f"Could not load category '{category}' from {resolved_file.name}: {e}"
+            if resolved_file == cat_file:
+                message += (
+                    f" If this is the public template, copy it to {cat_file.stem}.private{cat_file.suffix} "
+                    "and add your AMFI scheme codes."
+                )
+            return {"status": "error", "message": message}
 
     if not funds_to_analyze:
         # Fallback: search main funds.yaml for matching category tag
@@ -351,6 +362,7 @@ def fetch_category_rankings(category: str) -> dict[str, Any]:
         available_files = [
             p.stem for p in CONFIG_DIR.glob("*.yaml")
             if p.stem not in ("funds", "settings", "alerts", "alerts_example", "benchmarks", "analytics_funds")
+            and not p.stem.endswith(".private")
         ]
         return {
             "status": "error",
