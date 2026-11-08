@@ -22,6 +22,7 @@ Are you secretly holding multiple mutual funds that invest in the exact same sto
 * Prints a beautifully aligned **Pairwise Overlap Matrix Table** in the terminal.
 * Applies a **90% Relevance Concentration Rule**: lists the detailed stock allocations for those stocks contributing to 90% of the overlap, while cleanly grouping the minor ones at the bottom to eliminate clutter.
 * Automatically writes this detailed matrix and stock-level reports to a custom **`Portfolio Overlap`** tab in your Google Sheet!
+* To compare one fund with the other **active** funds only, use `fund_overlap_main.py`; it prints the result locally and does not write to a Google Sheet.
 
 ### 3. 🎨 Interactive Performance & Risk Web Dashboard (`dashboard_main.py`)
 Brings your offline returns database to life in a stunning web interface (`dashboard.html`):
@@ -598,6 +599,14 @@ To inspect the stock-level overlap and find hidden concentration risks across yo
 .venv/bin/python overlap_main.py
 ```
 *(This will output the overlap matrix table, perform the 90% relevance analysis, and automatically update your Google Sheet!)*
+
+To compare any fund with the active funds in `config/funds.yaml`, pass its AMFI scheme code. The target fund does not need to be listed in the YAML; that file supplies the comparison funds. If the target is listed but marked inactive, it is still used as the target and excluded from the comparison list.
+
+```bash
+.venv/bin/python fund_overlap_main.py --fund 120492
+```
+
+This prints funds ranked by overlap and the largest shared-stock contributions. The overlap percentage is the sum of the smaller allocation for each stock held by both funds. Funds marked `active: false` are excluded from comparisons. This command fetches current holdings from AMFI/Tickertape, uses the local mapping cache, and does not write to Google Sheets. Use `--funds PATH` to select another funds YAML file.
 
 ### 2. The Interactive HTML Dashboard
 To compile and explore your funds' returns, yearly cycles, risk parameters, and rolling statistics interactively:
