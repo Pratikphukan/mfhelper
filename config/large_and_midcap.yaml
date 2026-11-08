@@ -1,0 +1,3 @@
+# Copy this file to large_and_midcap.private.yaml and add the AMFI scheme
+# codes you want to compare. The private file is ignored by Git.
+funds: []
