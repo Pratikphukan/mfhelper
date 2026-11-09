@@ -82,8 +82,8 @@ def fetch_amfi_quarterly_aaum(
     """
     http = session or requests.Session()
 
-    # 1. Discover available financial years and the newest period
-    years_url = "https://www.amfiindia.com/api/average-aum-fundwise"
+    # 1. Discover available financial years and the newest period using the scheme-wise endpoint
+    years_url = "https://www.amfiindia.com/api/average-aum-schemewise?strType=Typewise&MF_ID=0"
     res_years = http.get(years_url, headers=AMFI_HEADERS, timeout=timeout)
     res_years.raise_for_status()
     years_data = res_years.json()
@@ -97,8 +97,8 @@ def fetch_amfi_quarterly_aaum(
     else:
         raise ValueError("Unexpected AMFI financial years response structure")
 
-    # 2. Get the quarters/periods for this newest financial year
-    period_url = f"https://www.amfiindia.com/api/average-aum-fundwise?fyId={latest_fy_id}"
+    # 2. Get the quarters/periods for this newest financial year using the scheme-wise endpoint
+    period_url = f"https://www.amfiindia.com/api/average-aum-schemewise?strType=Typewise&fyId={latest_fy_id}&MF_ID=0"
     res_period = http.get(period_url, headers=AMFI_HEADERS, timeout=timeout)
     res_period.raise_for_status()
     period_json = res_period.json()
@@ -140,7 +140,7 @@ def fetch_amfi_quarterly_aaum(
                 excl_dom = float(aum_dict.get("ExcludingFundOfFundsDomesticButIncludingFundOfFundsOverseas", 0.0) or 0.0)
                 fof_dom = float(aum_dict.get("FundOfFundsDomestic", 0.0) or 0.0)
                 total_lakhs = excl_dom + fof_dom
-                if total_lakhs > 0:
+                if total_lakhs >= 0:
                     aum_by_code[code_str] = round(total_lakhs / 100.0, 2)
 
     return aum_by_code, quarter_label
@@ -188,10 +188,19 @@ def _load_cache(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
         log.warning("Could not read AAUM cache %s: %s", path, exc)
         return None
+
+    if not isinstance(data, dict):
+        log.warning("Malformed AAUM cache in %s: expected dict, got %s", path, type(data).__name__)
+        return None
+    if not isinstance(data.get("aum_by_code"), dict):
+        log.warning("Malformed AAUM cache in %s: aum_by_code is missing or not a dict", path)
+        return None
+
+    return data
 
 
 def _save_cache(path: Path, aum_by_code: dict[str, float], quarter_label: str) -> None:

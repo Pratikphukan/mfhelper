@@ -382,13 +382,14 @@ A separate CLI for "long view" research metrics, independent from the
 daily NAV scheduler. Pulls one row per fund into a fresh worksheet tab
 (default name: **Fund Analytics**) of the same Google Sheet:
 
-| Fund Name | Scheme Code | 1Y % | 3Y CAGR % | 5Y CAGR % | 7Y CAGR % | 10Y CAGR % | SD % | Sharpe | Sortino | Calmar | Max DD (3Y) % | AUM (Cr.) | AUM Quarter | Expense % | Last Updated (IST) |
-|-----------|-------------|------|-----------|-----------|-----------|------------|------|--------|---------|--------|---------------|-----------|-------------|-----------|--------------------|
+| Fund Name | Scheme Code | 1Y % | 3Y CAGR % | 3Y SIP % | 5Y CAGR % | 5Y SIP % | 7Y CAGR % | 10Y CAGR % | SD % | Sharpe | Sortino | Calmar | Max DD (3Y) % | AUM (Cr.) | AUM Quarter | Expense % | Last Updated (IST) |
+|-----------|-------------|------|-----------|----------|-----------|----------|-----------|------------|------|--------|---------|--------|---------------|-----------|-------------|-----------|--------------------|
 
 ### What each column means
 
 - **1Y %** -- absolute (point-to-point) return over the trailing 365 days.
 - **3Y / 5Y / 7Y / 10Y CAGR %** -- annualized compound growth rate over those windows. Cells stay blank if the fund's history is shorter than the window.
+- **3Y / 5Y SIP %** -- annualized return (XIRR) of a hypothetical monthly SIP over those horizons.
 - **SD %** -- annualized standard deviation of daily log returns over the trailing 3 years. Annualization factor: √252.
 - **Sharpe** -- `(3Y CAGR − 7%) / SD %`. 7% is the assumed risk-free rate (RBI repo proxy). Higher = better risk-adjusted return.
 - **Sortino** -- `(3Y CAGR − 7%) / annualized downside deviation`. Like Sharpe, but only "punishes" negative-day volatility.

@@ -234,24 +234,18 @@ def run(args: argparse.Namespace) -> int:
         if expense_pct is not None:
             log.info("  Expense ratio (manual YAML/code): %.2f%%", expense_pct)
 
-        # Scrape expense ratio (and fallback AUM if AMFI AAUM is missing for this scheme).
-        if not args.no_expense_scrape:
+        # Scrape expense ratio if not manually configured.
+        if not args.no_expense_scrape and expense_pct is None:
             er = lookup_expense_ratio(
                 scheme_code=fc.code,
                 scheme_name=fc.name or result.scheme_name,
                 slug_hint=fc.groww_slug,
             )
-            if er is not None:
-                if expense_pct is None:
-                    expense_pct = er.expense_ratio_pct
-                if aum_crore is None and er.aum_crore is not None:
-                    aum_crore = er.aum_crore
-                    aum_quarter = None
+            if er is not None and er.expense_ratio_pct is not None:
+                expense_pct = er.expense_ratio_pct
 
         if expense_pct is not None:
             log.info("  Expense ratio: %.2f%%", expense_pct)
-        if aum_crore is not None and aum_quarter is None:
-            log.info("  AUM (Cr.): %s (Groww scrape)", f"₹{aum_crore:,.2f}")
 
         display_name = fc.name or result.scheme_name
         rows.append(AnalyticsRow(

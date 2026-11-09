@@ -134,6 +134,48 @@ def test_fetch_amfi_quarterly_aaum_success():
     assert aum_by_code["120492"] == 2337.33
     assert aum_by_code["127042"] == 24609.26
 
+    # Verify that all 3 calls use the schemewise endpoint
+    for call in mock_session.get.call_args_list:
+        assert "average-aum-schemewise" in call[0][0]
+
+
+def test_fetch_amfi_quarterly_aaum_preserves_zero_aum():
+    mock_session = MagicMock()
+    mock_session.get.side_effect = [
+        MagicMock(json=lambda: {"data": [{"id": 1}]}),
+        MagicMock(json=lambda: {"data": {"periods": [{"id": 1, "period": "July - September 2026"}]}}),
+        MagicMock(json=lambda: {
+            "data": [
+                {
+                    "schemes": [
+                        {
+                            "AMFI_Code": 199999,
+                            "AverageAumForTheMonth": {
+                                "ExcludingFundOfFundsDomesticButIncludingFundOfFundsOverseas": 0.0,
+                                "FundOfFundsDomestic": 0.0,
+                            },
+                        }
+                    ]
+                }
+            ]
+        }),
+    ]
+
+    aum_by_code, _ = fetch_amfi_quarterly_aaum(session=mock_session)
+    assert aum_by_code["199999"] == 0.0
+
+
+def test_get_quarterly_aaum_handles_malformed_cache(tmp_path):
+    cache_file = tmp_path / "quarterly_aaum.json"
+
+    # Malformed cases: list instead of dict, or aum_by_code not a dict
+    for bad_content in ("[]", '{"aum_by_code": ["not-a-dict"]}', '{"aum_by_code": 123}'):
+        cache_file.write_text(bad_content, encoding="utf-8")
+        with patch("mfhelper.aum.fetch_amfi_quarterly_aaum", side_effect=Exception("Network error")):
+            aum_by_code, quarter_label = get_quarterly_aaum(cache_path=cache_file)
+            assert aum_by_code == {}
+            assert quarter_label is None
+
 
 def test_get_quarterly_aaum_cached(tmp_path):
     cache_file = tmp_path / "quarterly_aaum.json"
