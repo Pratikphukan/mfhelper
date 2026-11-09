@@ -48,6 +48,7 @@ HEADERS = (
     "Calmar",
     "Max DD (3Y) %",
     "AUM (Cr.)",
+    "AUM Quarter",
     "Expense %",
     "Last Updated (IST)",
 )
@@ -74,6 +75,7 @@ _COLUMN_FORMATS = (
     _RATIO_FMT,     # Calmar
     _PERCENT_FMT,   # Max DD (3Y)
     _AUM_FMT,       # AUM (Cr.)
+    None,           # AUM Quarter (text)
     _PERCENT_FMT,   # Expense
     None,           # Last Updated
 )
@@ -101,6 +103,7 @@ class AnalyticsRow:
     aum_crore: float | None
     expense_pct: float | None
     last_updated_ist: datetime
+    aum_quarter: str | None = None
 
     def to_cells(self) -> list:
         # ``""`` (empty string) renders as a blank cell in Sheets, which is
@@ -128,6 +131,7 @@ class AnalyticsRow:
             fmt_ratio(self.calmar_3y),
             fmt_pct(self.max_dd_3y_pct),
             fmt_ratio(self.aum_crore),
+            self.aum_quarter or "",
             fmt_pct(self.expense_pct),
             self.last_updated_ist.strftime("%Y-%m-%d %H:%M:%S"),
         ]

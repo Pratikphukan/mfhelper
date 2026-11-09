@@ -382,8 +382,8 @@ A separate CLI for "long view" research metrics, independent from the
 daily NAV scheduler. Pulls one row per fund into a fresh worksheet tab
 (default name: **Fund Analytics**) of the same Google Sheet:
 
-| Fund Name | Scheme Code | 1Y % | 3Y CAGR % | 5Y CAGR % | 7Y CAGR % | 10Y CAGR % | SD % | Sharpe | Sortino | Expense % | Last Updated (IST) |
-|-----------|-------------|------|-----------|-----------|-----------|------------|------|--------|---------|-----------|--------------------|
+| Fund Name | Scheme Code | 1Y % | 3Y CAGR % | 5Y CAGR % | 7Y CAGR % | 10Y CAGR % | SD % | Sharpe | Sortino | Calmar | Max DD (3Y) % | AUM (Cr.) | AUM Quarter | Expense % | Last Updated (IST) |
+|-----------|-------------|------|-----------|-----------|-----------|------------|------|--------|---------|--------|---------------|-----------|-------------|-----------|--------------------|
 
 ### What each column means
 
@@ -392,6 +392,10 @@ daily NAV scheduler. Pulls one row per fund into a fresh worksheet tab
 - **SD %** -- annualized standard deviation of daily log returns over the trailing 3 years. Annualization factor: √252.
 - **Sharpe** -- `(3Y CAGR − 7%) / SD %`. 7% is the assumed risk-free rate (RBI repo proxy). Higher = better risk-adjusted return.
 - **Sortino** -- `(3Y CAGR − 7%) / annualized downside deviation`. Like Sharpe, but only "punishes" negative-day volatility.
+- **Calmar** -- `(3Y CAGR) / |Max Drawdown (3Y)|`. Ratio of annualized return to maximum historical drawdown.
+- **Max DD (3Y) %** -- maximum peak-to-trough decline over the trailing 3-year window.
+- **AUM (Cr.)** -- scheme-wise quarterly Average Assets Under Management (AAUM) in crore rupees from AMFI.
+- **AUM Quarter** -- calendar reporting quarter of the AMFI AAUM figure (e.g. `Jul-Sep 2026`).
 - **Expense %** -- current Total Expense Ratio (TER), scraped from Groww with AMFI-scheme-code validation. Manual override available.
 
 ### Run it
