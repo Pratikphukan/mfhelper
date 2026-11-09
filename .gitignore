@@ -14,6 +14,7 @@ data/fund_plots/
 data/benchmark_history/
 data/market_context/
 data/mfapi_cache/
+data/amfi_cache/
 data/daily_nav_dump.csv
 data/combined_portfolio_allocation.json
 data/tickertape_mappings.json

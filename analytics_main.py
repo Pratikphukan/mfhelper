@@ -35,6 +35,7 @@ from mfhelper.analytics_sheet import (
     AnalyticsRow,
     AnalyticsSheetWriter,
 )
+from mfhelper.aum import get_quarterly_aaum
 from mfhelper.config import FundConfig, load_analytics_funds, load_settings
 from mfhelper.expense_ratio import lookup_expense_ratio
 from mfhelper.mfapi import fetch_history
@@ -170,6 +171,10 @@ def run(args: argparse.Namespace) -> int:
         " (DRY RUN)" if args.dry_run else "",
     )
 
+    aaum_by_code, aaum_quarter = get_quarterly_aaum()
+    if aaum_quarter:
+        log.info("AMFI quarterly AAUM loaded for quarter: %s (%d schemes)", aaum_quarter, len(aaum_by_code))
+
     rows: list[AnalyticsRow] = []
     soft_warnings = 0
 
@@ -220,27 +225,27 @@ def run(args: argparse.Namespace) -> int:
 
         # Expense ratio and AUM lookup.
         expense_pct: float | None = fc.expense_ratio_pct
-        aum_crore: float | None = None
+        aum_crore: float | None = aaum_by_code.get(fc.code)
+        aum_quarter: str | None = aaum_quarter if aum_crore is not None else None
+
+        if aum_crore is not None:
+            log.info("  AUM (Cr.): %s (%s)", f"₹{aum_crore:,.2f}", aum_quarter)
 
         if expense_pct is not None:
             log.info("  Expense ratio (manual YAML/code): %.2f%%", expense_pct)
 
-        # Even if expense ratio is set manually, we should scrape AUM if scraping is allowed.
-        if not args.no_expense_scrape:
+        # Scrape expense ratio if not manually configured.
+        if not args.no_expense_scrape and expense_pct is None:
             er = lookup_expense_ratio(
                 scheme_code=fc.code,
                 scheme_name=fc.name or result.scheme_name,
                 slug_hint=fc.groww_slug,
             )
-            if er is not None:
-                if expense_pct is None:
-                    expense_pct = er.expense_ratio_pct
-                aum_crore = er.aum_crore
+            if er is not None and er.expense_ratio_pct is not None:
+                expense_pct = er.expense_ratio_pct
 
         if expense_pct is not None:
             log.info("  Expense ratio: %.2f%%", expense_pct)
-        if aum_crore is not None:
-            log.info("  AUM (Cr.): %s", f"₹{aum_crore:,.2f}")
 
         display_name = fc.name or result.scheme_name
         rows.append(AnalyticsRow(
@@ -259,6 +264,7 @@ def run(args: argparse.Namespace) -> int:
             calmar_3y=calmar_3y,
             max_dd_3y_pct=max_dd_3y,
             aum_crore=aum_crore,
+            aum_quarter=aum_quarter,
             expense_pct=expense_pct,
             last_updated_ist=now_ist,
         ))
