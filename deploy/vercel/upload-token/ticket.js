@@ -5,6 +5,13 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 export const AUDIENCE = 'mfhelper-upload';
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const MIN_SECRET_LENGTH = 32;
+export const UPLOAD_TYPES = {
+  cas_pdf: { contentType: 'application/pdf', extension: 'pdf' },
+  groww_xlsx: {
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    extension: 'xlsx',
+  },
+};
 
 export class TicketError extends Error {}
 
@@ -40,5 +47,8 @@ export function verifyTicket(secret, ticket, nowMs = Date.now()) {
   if (!Number.isInteger(payload.max_bytes) || payload.max_bytes <= 0 || payload.max_bytes > MAX_UPLOAD_BYTES) {
     throw invalid();
   }
+  const uploadType = payload.upload_type ?? 'cas_pdf';
+  if (!Object.hasOwn(UPLOAD_TYPES, uploadType)) throw invalid();
+  payload.upload_type = uploadType;
   return payload;
 }

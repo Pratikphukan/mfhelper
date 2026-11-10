@@ -24,6 +24,7 @@ Scheduled (launchd) fires the same command at 10:30 AM IST every day.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -46,6 +47,7 @@ from mfhelper.alerts import check_fund_alerts, dispatch_alerts_email, check_conf
 from mfhelper.market_regime import banner_text, build_market_context
 from mfhelper.regime_filter import annotate_buys, check_trimming_for_context
 from mfhelper.regime_sheet import RegimeSheetWriter
+from mfhelper.current_holdings import read_current_holdings
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -96,6 +98,24 @@ def run(args: argparse.Namespace) -> int:
         worksheet_name,
         alert_settings.email.enable,
     )
+
+    holdings_context = None
+    holdings_tab = "Current Holdings (Dev)" if args.dev else "Current Holdings"
+    try:
+        holdings_context = read_current_holdings(
+            spreadsheet_id=settings.google_sheet.spreadsheet_id,
+            credentials_path=CREDENTIALS_PATH,
+            token_path=TOKEN_PATH,
+            worksheet_name=holdings_tab,
+        )
+        if holdings_context is not None:
+            log.info(
+                "Loaded current holdings from statement dated %s for alert context",
+                holdings_context.statement_date.isoformat(),
+            )
+    except Exception as exc:
+        # Portfolio context is informational; it must not change NAV or alerts.
+        log.warning("Could not read current holdings for alert context: %s", exc)
 
     tz = ZoneInfo(settings.timezone)
     run_timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -379,6 +399,21 @@ def run(args: argparse.Namespace) -> int:
 
     # Resolve any contradictory/conflicting alerts (e.g. RSI overbought vs Peak discount) before dispatching!
     resolved_alerts = resolve_conflicting_alerts(all_triggered_alerts)
+
+    # Holdings add context to triggered items only; they do not alter signals.
+    if holdings_context is not None:
+        resolved_alerts = [
+            replace(alert, portfolio_note=holdings_context.note_for(alert.scheme_code))
+            for alert in resolved_alerts
+        ]
+        all_confluence_signals = [
+            replace(signal, portfolio_note=holdings_context.note_for(signal.scheme_code))
+            for signal in all_confluence_signals
+        ]
+        all_trimming_signals = [
+            replace(signal, portfolio_note=holdings_context.note_for(signal.scheme_code))
+            for signal in all_trimming_signals
+        ]
 
     # Dispatch indicator alerts email digest if any are triggered
     if advice_context is None:

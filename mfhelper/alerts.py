@@ -31,6 +31,7 @@ class TriggeredAlert:
     alert_type: str          # e.g., "BUY TIER 1", "BUY TIER 3", "MOMENTUM WARNING", etc.
     action_suggestion: str
     context_note: str = ""   # Set only by the market-regime layer; advice shown under the suggestion
+    portfolio_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class DipBuyingSignal:
     # Set only by the market-regime layer: suggested size as a multiple of the normal top-up.
     multiplier: float | None = None
     context_note: str = ""  # Why the multiplier was chosen (regime / valuation), shown in the email
+    portfolio_note: str = ""
 
 
 def check_confluence_signal(
@@ -128,6 +130,7 @@ class TrimmingSignal:
     suggestion: str
     groww_link: str         # Direct search page link
     context_note: str = ""  # Set only by the market-regime layer (e.g. thresholds tightened)
+    portfolio_note: str = ""
 
 
 def check_trimming_signal(
@@ -363,28 +366,31 @@ def format_multiplier(value: float) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".") + "x"
 
 
-def _signal_note_html(multiplier: float | None, context_note: str) -> str:
+def _signal_note_html(multiplier: float | None, context_note: str, portfolio_note: str = "") -> str:
     """Optional regime line for a briefing card. Empty (and invisible) unless regime data is set."""
-    if multiplier is None and not context_note:
+    if multiplier is None and not context_note and not portfolio_note:
         return ""
     parts = []
     if multiplier is not None:
         parts.append(f"<strong>Suggested size:</strong> {format_multiplier(multiplier)} your normal top-up")
     if context_note:
         parts.append(html_lib.escape(context_note))
+    if portfolio_note:
+        parts.append(html_lib.escape(portfolio_note))
     return (
         '\n                    <div style="font-size: 12px; color: #495057; line-height: 1.4; margin-top: 6px;">'
         f'{" - ".join(parts)}</div>'
     )
 
 
-def _row_note_html(context_note: str) -> str:
+def _row_note_html(context_note: str, portfolio_note: str = "") -> str:
     """Optional regime note under a table row's suggestion. Empty unless a note is set."""
-    if not context_note:
+    if not context_note and not portfolio_note:
         return ""
+    notes = "<br>".join(html_lib.escape(note) for note in (context_note, portfolio_note) if note)
     return (
         '<div style="font-style: normal; font-size: 12px; margin-top: 4px;">'
-        f"{html_lib.escape(context_note)}</div>"
+        f"{notes}</div>"
     )
 
 
@@ -456,7 +462,7 @@ def dispatch_alerts_email(
                 card_bg = "#f4fafd"
                 
             reasons_str = ", ".join(sig.reasons)
-            note_html = _signal_note_html(sig.multiplier, sig.context_note)
+            note_html = _signal_note_html(sig.multiplier, sig.context_note, sig.portfolio_note)
             briefing_html += f"""
                 <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
                     <div style="margin-bottom: 8px;">
@@ -504,7 +510,7 @@ def dispatch_alerts_email(
                 card_bg = "#fffdf0"
                 
             reasons_str = ", ".join(sig.reasons)
-            note_html = _signal_note_html(None, sig.context_note)
+            note_html = _signal_note_html(None, sig.context_note, sig.portfolio_note)
             briefing_html += f"""
                 <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
                     <div style="margin-bottom: 8px;">
@@ -553,7 +559,7 @@ def dispatch_alerts_email(
         value_suffix = "%" if "Distance" in alt.indicator_name or "Crossing" in alt.indicator_name else ""
         trigger_suffix = "%" if "Distance" in alt.indicator_name else ""
 
-        row_note_html = _row_note_html(alt.context_note)
+        row_note_html = _row_note_html(alt.context_note, alt.portfolio_note)
         rows_html += f"""
         <tr style="background-color: {bg_color}; color: {text_color};">
             <td style="padding: 10px; border: 1px solid #dee2e6; font-weight: bold;">{alt.fund_name} ({alt.scheme_code})</td>

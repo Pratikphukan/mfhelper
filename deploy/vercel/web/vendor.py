@@ -20,6 +20,8 @@ MODULES = (
     "upload_ticket.py",
     "vercel_holdings_cache.py",
     "vercel_holdings_import_app.py",
+    "groww_holdings_import.py",
+    "groww_holdings_sheet.py",
 )
 
 

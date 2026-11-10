@@ -47,6 +47,29 @@ def _signed_in_client(monkeypatch, fake_blob=None):
     return client, token, fake_blob, import_app
 
 
+def _groww_workbook():
+    openpyxl = pytest.importorskip("openpyxl")
+    from io import BytesIO
+
+    workbook = openpyxl.Workbook()
+    details = workbook.active
+    details.title = "Personal Details"
+    details.append(["PAN", "ABCDE1234F"])
+    sheet = workbook.create_sheet("Holdings")
+    sheet.append(["HOLDINGS AS ON 2026-11-10"])
+    sheet.append([
+        "Scheme Name", "Category", "Sub-category", "Folio No.", "Units",
+        "Invested Value", "Current Value", "Returns", "XIRR", "AMC", "Source",
+    ])
+    sheet.append([
+        "Sample Direct Growth", "Equity", "Flexi Cap", "000123", 2,
+        1000, 1200, 200, "10%", "Ignored AMC", "Ignored Source",
+    ])
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def test_import_page_requires_https_url_and_both_secrets(monkeypatch):
     _configure(monkeypatch)
     import_app, TestClient = _app_modules()
@@ -144,6 +167,76 @@ def test_upload_ticket_requires_csrf_and_returns_a_verifiable_scoped_ticket(monk
     assert payload["login"] == "MFHelper-Owner"
     assert body["presign_path"] == "/upload-token/presign"
     assert response.headers["cache-control"] == "no-store"
+
+
+def test_groww_upload_ticket_requires_settings_and_is_scoped_to_xlsx(monkeypatch):
+    client, token, _blob, _app = _signed_in_client(monkeypatch)
+    missing = client.post("/upload-ticket", json={"form_token": token, "upload_type": "groww_xlsx"})
+    assert missing.status_code == 503
+
+    monkeypatch.setenv("MFHELPER_SPREADSHEET_ID", "spreadsheet-id")
+    monkeypatch.setenv("MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON", json.dumps({
+        "client_email": "service@example.com", "private_key": "fake-key",
+    }))
+    monkeypatch.setenv("MFHELPER_FUND_CODE_MAP", '[{"name":"Sample Direct Growth","code":"123456"}]')
+    response = client.post("/upload-ticket", json={"form_token": token, "upload_type": "groww_xlsx"})
+
+    assert response.status_code == 200
+    body = response.json()
+    payload = verify_ticket(TICKET_SECRET, body["ticket"])
+    assert payload["upload_type"] == "groww_xlsx"
+    assert body["content_type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def test_groww_import_updates_sheet_and_discards_workbook(monkeypatch):
+    fake = FakeBlob()
+    fake.objects["tmp/groww.xlsx"] = _groww_workbook()
+    client, token, _blob, import_app = _signed_in_client(monkeypatch, fake)
+    monkeypatch.setenv("MFHELPER_SPREADSHEET_ID", "spreadsheet-id")
+    monkeypatch.setenv("MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON", json.dumps({
+        "client_email": "service@example.com", "private_key": "fake-key",
+    }))
+    monkeypatch.setenv("MFHELPER_FUND_CODE_MAP", '[{"name":"Sample Direct Growth","code":"123456"}]')
+    captured = {}
+
+    class FakeWriter:
+        def __init__(self, **kwargs):
+            captured["settings"] = kwargs
+
+        def replace(self, values):
+            captured["values"] = values
+
+    monkeypatch.setattr(import_app, "CurrentHoldingsSheetWriter", FakeWriter)
+    response = client.post("/import", json={
+        "blob_pathname": "tmp/groww.xlsx", "upload_type": "groww_xlsx", "form_token": token,
+    })
+
+    assert response.status_code == 200
+    assert "Updated 1 fund holdings" in response.json()["message"]
+    assert "tmp/groww.xlsx" not in fake.objects
+    assert captured["values"][1][1] == "123456"
+    assert "Ignored AMC" not in repr(captured["values"])
+    assert "Ignored Source" not in repr(captured["values"])
+    assert "ABCDE1234F" not in repr(captured["values"])
+
+
+def test_invalid_groww_workbook_does_not_write_and_is_deleted(monkeypatch):
+    fake = FakeBlob()
+    fake.objects["tmp/bad.xlsx"] = b"not a workbook"
+    client, token, _blob, import_app = _signed_in_client(monkeypatch, fake)
+    monkeypatch.setenv("MFHELPER_SPREADSHEET_ID", "spreadsheet-id")
+    monkeypatch.setenv("MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON", json.dumps({
+        "client_email": "service@example.com", "private_key": "fake-key",
+    }))
+    monkeypatch.setenv("MFHELPER_FUND_CODE_MAP", '[{"name":"Fund","code":"123"}]')
+    monkeypatch.setattr(import_app, "CurrentHoldingsSheetWriter", lambda **_kwargs: pytest.fail("invalid workbook touched Sheets"))
+
+    response = client.post("/import", json={
+        "blob_pathname": "tmp/bad.xlsx", "upload_type": "groww_xlsx", "form_token": token,
+    })
+
+    assert response.status_code == 400
+    assert "tmp/bad.xlsx" not in fake.objects
 
 
 def test_upload_ticket_cleans_up_stale_temp_pdfs(monkeypatch):

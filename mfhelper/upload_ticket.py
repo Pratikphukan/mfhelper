@@ -20,6 +20,10 @@ AUDIENCE = "mfhelper-upload"
 TICKET_TTL_SECONDS = 120
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MIN_SECRET_LENGTH = 32
+UPLOAD_TYPES = {
+    "cas_pdf": "application/pdf",
+    "groww_xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
 
 
 class TicketError(ValueError):
@@ -51,8 +55,11 @@ def mint_ticket(
     now: float | None = None,
     ttl_seconds: int = TICKET_TTL_SECONDS,
     max_bytes: int = MAX_UPLOAD_BYTES,
+    upload_type: str = "cas_pdf",
 ) -> str:
     _require_secret(secret)
+    if not isinstance(upload_type, str) or upload_type not in UPLOAD_TYPES:
+        raise TicketError("The selected upload type is not supported.")
     issued_at = int(time.time() if now is None else now)
     payload = {
         "aud": AUDIENCE,
@@ -60,6 +67,7 @@ def mint_ticket(
         "exp": issued_at + int(ttl_seconds),
         "nonce": secrets.token_urlsafe(16),
         "max_bytes": int(max_bytes),
+        "upload_type": upload_type,
     }
     payload_b64 = _b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
     return f"{payload_b64}.{_signature(secret, payload_b64)}"
@@ -84,5 +92,8 @@ def verify_ticket(secret: str, ticket: object, *, now: float | None = None) -> d
         raise TicketError("The upload ticket has expired. Reload the page and try again.")
     max_bytes = payload.get("max_bytes")
     if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or not 0 < max_bytes <= MAX_UPLOAD_BYTES:
+        raise TicketError("The upload ticket is invalid.")
+    upload_type = payload.get("upload_type", "cas_pdf")
+    if not isinstance(upload_type, str) or upload_type not in UPLOAD_TYPES:
         raise TicketError("The upload ticket is invalid.")
     return payload
