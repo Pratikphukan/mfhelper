@@ -10,7 +10,7 @@ Add an on-demand upload through the existing remote import page. MFHelper reads 
 
 Each successful import replaces the current table with the new holdings. Holdings absent from the newest statement are removed from this current view. No historical snapshots are retained. The daily alert can use the latest uploaded snapshot and should be clear about its statement date.
 
-AMFI codes must be matched unambiguously using the scheme name and fund house. An unmatched or ambiguous holding remains in the sheet with a blank code and a review status; MFHelper must not guess a code or reject the complete import.
+AMFI codes come from a minimal private mapping in Vercel, copied from the user's `funds.yaml` and containing only each fund's code and name. An unmatched or ambiguous holding remains in the sheet with a blank code and a review status; MFHelper must not guess a code or reject the complete import.
 
 The original XLSX is temporary input and is discarded after processing. MFHelper reads only the detailed fund-and-folio holdings rows. It ignores the personal-details section and Groww's overall holdings summary, and does not copy either into MFHelper.
 
