@@ -20,11 +20,9 @@ Use a separate `Current Holdings` tab so the Groww upload does not overwrite the
 | Column | Purpose |
 | --- | --- |
 | Scheme Name | Fund name from the export |
-| AMC | Fund house |
 | Category | Groww category |
 | Sub-category | Groww sub-category |
 | Folio No. | Distinguishes holdings in separate folios |
-| Source | Source value from the export, if present |
 | Units | Units currently held |
 | Invested Value | Amount invested as reported by Groww |
 | Current Value | Current holding value as reported by Groww |
@@ -60,5 +58,5 @@ The alert should use only the latest successful statement. It can compare trigge
 ## Questions for Approval
 
 1. Approve giving the Vercel importer Google Sheets credentials so it can write the `Current Holdings` tab. The sheet remains the single current-state source; no holdings copy is kept in Vercel Blob.
-2. Confirm the proposed `Current Holdings` columns, including the source XIRR field and folio number.
+2. Confirm the proposed `Current Holdings` columns, including XIRR and folio number.
 3. Confirm that each successful upload replaces the whole table and no history is retained.
