@@ -1,0 +1,20 @@
+# Groww Current Holdings
+
+## Problem
+
+MFHelper can receive a Groww mutual-fund holdings export, but the user needs a simple current-holdings view that can inform daily alerts. A historical log is not needed for the first version, and Groww exports arrive only when the user chooses to upload one.
+
+## Proposal
+
+Add an on-demand upload through the existing remote import page. MFHelper reads a selected Groww XLSX export and refreshes a dedicated `Current Holdings` Google Sheets tab with the newest holdings. The tab should resemble Groww's holdings table and include a `Last Updated` timestamp showing when MFHelper processed the file. It should also preserve the report's statement date (`Holdings As On`).
+
+Each successful import replaces the current table with the new holdings. Holdings absent from the newest statement are removed from this current view. No historical snapshots are retained. The daily alert can use the latest uploaded snapshot and should be clear about its statement date.
+
+The original XLSX is temporary input and is discarded after processing. Personal details outside the holdings table are not copied.
+
+## Out of Scope
+
+- Scheduled or automatic Groww imports.
+- Historical snapshots or comparisons between past statements.
+- Changes to the Daily NAV worksheet or run schedule.
+- Investment recommendations or automatic trades.
