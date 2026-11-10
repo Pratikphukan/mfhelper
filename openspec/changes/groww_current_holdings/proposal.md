@@ -10,7 +10,7 @@ Add an on-demand upload through the existing remote import page. MFHelper reads 
 
 Each successful import replaces the current table with the new holdings. Holdings absent from the newest statement are removed from this current view. No historical snapshots are retained. The daily alert can use the latest uploaded snapshot and should be clear about its statement date.
 
-The original XLSX is temporary input and is discarded after processing. Personal details outside the holdings table are not copied.
+The original XLSX is temporary input and is discarded after processing. MFHelper reads only the detailed fund-and-folio holdings rows. It ignores the personal-details section and Groww's overall holdings summary, and does not copy either into MFHelper.
 
 ## Out of Scope
 
