@@ -49,7 +49,8 @@ The alert should use only the latest successful statement. It can compare trigge
 
 ## Privacy and Failure Behavior
 
-- Do not copy PAN, contact details, or unrelated workbook sections.
+- Parse only the detailed fund-and-folio holdings table.
+- Ignore the personal-details section and Groww's overall holdings summary; do not store or use either.
 - Do not retain the uploaded XLSX after processing.
 - Do not change the sheet until workbook validation succeeds.
 - Keep a failed import from clearing or partially replacing the last good snapshot.
