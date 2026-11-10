@@ -36,11 +36,13 @@ The `Statement Date` and `Last Updated` have different meanings: the first is th
 
 ## AMFI Scheme Code Matching
 
-- Match the detailed Groww scheme name and fund house against the AMFI scheme catalogue, including plan and option details such as Direct Growth.
+- Read a server-only `MFHELPER_FUND_CODE_MAP` Vercel Secret containing only the configured fund `code` and `name` pairs from the user's private `funds.yaml`.
+- Match the detailed Groww scheme name to this mapping, including plan and option details such as Direct Growth. Normalize harmless differences in spacing and punctuation, but do not use a fuzzy match.
 - Populate the code only when one unique matching scheme is found.
 - If there is no match or more than one possible match, keep the holding and leave the code blank; show a review status for that row.
 - An unresolved code must not reject the upload or be inferred from a similar fund name.
 - Matching does not depend on the fund being active in `funds.yaml`; inactive or unconfigured holdings still belong in the user's current-holdings view.
+- Keep this mapping out of the repository and browser bundle. Scope the Vercel Secret to Production; update it when the private fund list changes.
 
 ## Refresh Behavior
 
@@ -67,6 +69,4 @@ The alert should use only the latest successful statement. It can compare trigge
 
 ## Questions for Approval
 
-1. Approve giving the Vercel importer Google Sheets credentials so it can write the `Current Holdings` tab. The sheet remains the single current-state source; no holdings copy is kept in Vercel Blob.
-2. Confirm the proposed `Current Holdings` columns, including AMFI Scheme Code, XIRR, and folio number.
-3. Confirm that each successful upload replaces the whole table and no history is retained.
+The user has selected the remote import page, current-state replacement with no history, the proposed Groww holdings fields with `AMC` and `Source` omitted, and a minimal Vercel Secret mapping fund names to AMFI codes. The user has also agreed that Vercel needs Google Sheets access to create and refresh the tab.
