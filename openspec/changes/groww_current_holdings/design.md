@@ -36,13 +36,23 @@ The `Statement Date` and `Last Updated` have different meanings: the first is th
 
 ## AMFI Scheme Code Matching
 
-- Read a server-only `MFHELPER_FUND_CODE_MAP` Vercel Secret containing only the configured fund `code` and `name` pairs from the user's private `funds.yaml`.
-- Match the detailed Groww scheme name to this mapping, including plan and option details such as Direct Growth. Normalize harmless differences in spacing and punctuation, but do not use a fuzzy match.
-- Populate the code only when one unique matching scheme is found.
-- If there is no match or more than one possible match, keep the holding and leave the code blank; show a review status for that row.
-- An unresolved code must not reject the upload or be inferred from a similar fund name.
-- Matching does not depend on the fund being active in `funds.yaml`; inactive or unconfigured holdings still belong in the user's current-holdings view.
-- Keep this mapping out of the repository and browser bundle. Scope the Vercel Secret to Production; update it when the private fund list changes.
+To connect Groww holdings to daily NAV tracking and analytics, MFHelper resolves 6-digit AMFI codes using a safe two-tier lookup:
+
+1. **Tier 1 — Private Config Map (`MFHELPER_FUND_CODE_MAP`):**
+   - Checks the user's private mapping secret containing `{"code": ..., "name": ...}` pairs.
+   - Normalizes spacing and punctuation for an exact name match.
+   - If one code matches: assigns it with status `exact_config` and skips the network lookup.
+
+2. **Tier 2 — Automated mfapi.in Search Fallback:**
+   - If Tier 1 has no unique code, searches `https://api.mfapi.in/mf/search?q=<full_scheme_name>`.
+   - Allows only harmless differences such as `Direct Growth` versus `Direct Plan - Growth Option`; the remaining normalized scheme names must match exactly.
+   - Accepts only Direct Growth plans and rejects names containing `regular`, `idcw`, `dividend`, `payout`, or `reinvestment`.
+   - If exactly one distinct AMFI code matches: assigns it with status `mfapi_search`.
+   - If no code matches: leaves it blank with status `unmatched`. If multiple distinct codes match: leaves it blank with status `ambiguous`.
+   - Uses a short request timeout and caches successful search responses for 24 hours per warm service instance. If the API is unavailable, leaves the code blank and continues the import.
+
+- An unresolved code must never reject the upload or crash the sheet update.
+- The matcher never guesses with loose fuzzy logic. Unresolved funds remain in the sheet with a blank code so the user can review them.
 
 ## Refresh Behavior
 

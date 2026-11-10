@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from concurrent.futures import ThreadPoolExecutor
 import json
 import re
+import threading
+import time
 import unicodedata
 from typing import Callable, Iterable
 from zoneinfo import ZoneInfo
+
+import requests
 
 from mfhelper.groww_holdings_import import GrowwHoldingsSnapshot
 
@@ -30,6 +35,11 @@ HEADERS = (
     "Last Updated",
 )
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
+MFAPI_SEARCH_URL = "https://api.mfapi.in/mf/search"
+MFAPI_CACHE_TTL_SECONDS = 24 * 60 * 60
+_MFAPI_CACHE_MAX_ENTRIES = 512
+_MFAPI_CACHE: dict[str, tuple[float, tuple[tuple[str, str], ...]]] = {}
+_MFAPI_CACHE_LOCK = threading.Lock()
 
 
 class HoldingsSheetError(ValueError):
@@ -74,12 +84,94 @@ def normalize_scheme_name(value: str) -> str:
 def match_scheme_code(
     scheme_name: str,
     code_map: dict[str, tuple[str, ...]],
+    *,
+    search: Callable[[str], Iterable[tuple[str, str]]] | None = None,
 ) -> tuple[str, str]:
-    """Return an AMFI code only for a unique normalized fund-name match."""
+    """Resolve from private config first, then accept only a unique MFAPI match."""
     matches = code_map.get(normalize_scheme_name(scheme_name), ())
     if len(matches) == 1:
-        return matches[0], "Matched"
-    return "", "Needs review"
+        return matches[0], "exact_config"
+
+    try:
+        candidates = (search or _search_mfapi)(scheme_name)
+    except Exception:
+        candidates = ()
+    matched_codes = {
+        str(code)
+        for code, candidate_name in candidates
+        if _same_direct_growth_scheme(scheme_name, candidate_name)
+        and str(code).isdigit()
+    }
+    if len(matched_codes) == 1:
+        return next(iter(matched_codes)), "mfapi_search"
+    if len(matched_codes) > 1:
+        return "", "ambiguous"
+    return "", "unmatched"
+
+
+def _same_direct_growth_scheme(groww_name: str, mfapi_name: str) -> bool:
+    """Allow provider wording like 'Direct Plan - Growth Option', not other plans."""
+    ignored = {"plan", "option"}
+    disallowed = {"regular", "idcw", "dividend", "payout", "reinvestment"}
+    groww_parts = normalize_scheme_name(groww_name).split()
+    mfapi_parts = normalize_scheme_name(mfapi_name).split()
+    if any(part in disallowed for part in groww_parts + mfapi_parts):
+        return False
+    groww_core = [part for part in groww_parts if part not in ignored]
+    mfapi_core = [part for part in mfapi_parts if part not in ignored]
+    return (
+        "direct" in groww_core
+        and "growth" in groww_core
+        and "direct" in mfapi_core
+        and "growth" in mfapi_core
+        and groww_core == mfapi_core
+    )
+
+
+def _search_mfapi(scheme_name: str) -> tuple[tuple[str, str], ...]:
+    """Search MFAPI with a short timeout and a 24-hour per-instance cache."""
+    key = normalize_scheme_name(scheme_name)
+    if not key:
+        return ()
+    now = time.monotonic()
+    with _MFAPI_CACHE_LOCK:
+        cached = _MFAPI_CACHE.get(key)
+        if cached and now - cached[0] < MFAPI_CACHE_TTL_SECONDS:
+            return cached[1]
+        if cached:
+            _MFAPI_CACHE.pop(key, None)
+
+    try:
+        response = requests.get(
+            MFAPI_SEARCH_URL,
+            params={"q": scheme_name},
+            timeout=(2, 4),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            return ()
+        results: list[tuple[str, str]] = []
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            code = item.get("schemeCode")
+            name = item.get("schemeName")
+            if isinstance(code, (str, int)) and not isinstance(code, bool) and isinstance(name, str):
+                code_text = str(code)
+                if code_text.isdigit() and name.strip():
+                    results.append((code_text, name.strip()))
+        result_tuple = tuple(results)
+    except Exception:
+        # Lookup failure is a review state, never a reason to abort a valid import.
+        return ()
+
+    with _MFAPI_CACHE_LOCK:
+        if len(_MFAPI_CACHE) >= _MFAPI_CACHE_MAX_ENTRIES:
+            oldest_key = min(_MFAPI_CACHE, key=lambda item: _MFAPI_CACHE[item][0])
+            _MFAPI_CACHE.pop(oldest_key, None)
+        _MFAPI_CACHE[key] = (time.monotonic(), result_tuple)
+    return result_tuple
 
 
 def make_sheet_values(
@@ -96,8 +188,20 @@ def make_sheet_values(
     statement_date = snapshot.statement_date.isoformat()
     values: list[list[object]] = [list(HEADERS)]
     unmatched = 0
+    names_by_key: dict[str, str] = {}
     for holding in snapshot.holdings:
-        code, status = match_scheme_code(holding.scheme_name, code_map)
+        key = normalize_scheme_name(holding.scheme_name)
+        if key not in names_by_key:
+            names_by_key[key] = holding.scheme_name
+    unique_names = list(names_by_key.items())
+    if unique_names:
+        with ThreadPoolExecutor(max_workers=min(4, len(unique_names))) as executor:
+            resolved = list(executor.map(lambda pair: match_scheme_code(pair[1], code_map), unique_names))
+        resolved_by_key = dict(zip((key for key, _ in unique_names), resolved))
+    else:
+        resolved_by_key = {}
+    for holding in snapshot.holdings:
+        code, status = resolved_by_key[normalize_scheme_name(holding.scheme_name)]
         if not code:
             unmatched += 1
         values.append([

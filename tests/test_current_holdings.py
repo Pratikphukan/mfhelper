@@ -36,9 +36,9 @@ class FakeClient:
 def _rows():
     return [
         list(HEADERS),
-        ["Fund A", "123", "Matched", "Equity", "Flexi", "1", "1", "100", "150", "50", "0.1", "2026-11-10", "2026-11-11"],
-        ["Fund B", "", "Needs review", "Equity", "Mid Cap", "2", "2", "200", "250", "50", "", "2026-11-10", "2026-11-11"],
-        ["Fund A", "123", "Matched", "Equity", "Flexi", "3", "2", "200", "350", "150", "0.2", "2026-11-10", "2026-11-11"],
+        ["Fund A", "123", "exact_config", "Equity", "Flexi", "1", "1", "100", "150", "50", "0.1", "2026-11-10", "2026-11-11"],
+        ["Fund B", "", "unmatched", "Equity", "Mid Cap", "2", "2", "200", "250", "50", "", "2026-11-10", "2026-11-11"],
+        ["Fund A", "123", "mfapi_search", "Equity", "Flexi", "3", "2", "200", "350", "150", "0.2", "2026-11-10", "2026-11-11"],
     ]
 
 
@@ -61,7 +61,7 @@ def test_reads_latest_holdings_and_aggregates_folios_by_amfi_code():
 
 @pytest.mark.parametrize(
     "rows",
-    [[], [["unexpected header"]], [list(HEADERS), ["Fund", "123", "Matched", "Equity", "Flexi", "1", "1", "100", "bad", "0", "", "2026-11-10", "now"]]],
+    [[], [["unexpected header"]], [list(HEADERS), ["Fund", "123", "exact_config", "Equity", "Flexi", "1", "1", "100", "bad", "0", "", "2026-11-10", "now"]]],
 )
 def test_rejects_invalid_current_holdings_sheet(rows):
     spreadsheet = FakeSpreadsheet(rows)

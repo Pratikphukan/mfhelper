@@ -79,7 +79,7 @@ def read_current_holdings(
         status = str(row[2]).strip()
         current = _decimal(row[8])
         total += current
-        if status == "Matched" and code:
+        if status in {"exact_config", "mfapi_search"} and code:
             values_by_code[code] = values_by_code.get(code, Decimal(0)) + current
         try:
             statement_dates.add(date.fromisoformat(str(row[11]).strip()))

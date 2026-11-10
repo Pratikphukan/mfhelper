@@ -317,7 +317,7 @@ async def import_statement(request: Request) -> JSONResponse:
             spreadsheet_id, account_info, code_map = _groww_settings()
             xlsx_bytes = await store.read_temp_xlsx(pathname)
             parsed = await asyncio.to_thread(parse_groww_xlsx, xlsx_bytes)
-            values, unmatched = make_sheet_values(parsed, code_map)
+            values, unmatched = await asyncio.to_thread(make_sheet_values, parsed, code_map)
             writer = CurrentHoldingsSheetWriter(
                 spreadsheet_id=spreadsheet_id,
                 service_account_info=account_info,

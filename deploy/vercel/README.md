@@ -19,7 +19,9 @@ Vercel Services is a Beta feature. Routes are defined in the repository's `verce
 
 The sheet contains one current row per fund and folio. It includes the Groww fund, category, folio, units, invested/current values, returns and XIRR, plus AMFI code, statement date and MFHelper's `Last Updated` timestamp. It omits AMC, Source, personal details and Groww's summary. Each successful upload replaces the previous rows; MFHelper keeps no upload history.
 
-AMFI scheme codes are matched by exact normalized scheme name against `MFHELPER_FUND_CODE_MAP`. Only unique matches receive a code. Unmatched or ambiguous rows remain in the sheet with a blank code and `Needs review` status. The mapping should contain only the fund names and AMFI codes from your private `funds.yaml`.
+AMFI scheme codes are matched first by exact normalized name against `MFHELPER_FUND_CODE_MAP`. If that does not give one code, MFHelper searches MFAPI by the full scheme name and accepts only one exact Direct Growth result. MFAPI wording may include harmless `Plan` or `Option` words. It rejects Regular, IDCW, and dividend options. Results are cached for 24 hours per warm service instance. If MFAPI is unavailable, no exact candidate is found, or multiple codes match, the code stays blank and the row is marked for review; the upload continues.
+
+The private mapping should contain only the fund names and AMFI codes from your `funds.yaml`. MFAPI is a secondary lookup source and should not be treated as the source of truth for ambiguous matches.
 
 The Daily NAV GitHub Action can read `Current Holdings` with its existing Google Sheets credentials and show the reported holding value/share and statement date alongside triggered alerts. This context does not change signal thresholds or investment suggestions. Transactions after the statement date are not reflected until another upload.
 
