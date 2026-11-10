@@ -20,6 +20,7 @@ Use a separate `Current Holdings` tab so the Groww upload does not overwrite the
 | Column | Purpose |
 | --- | --- |
 | Scheme Name | Fund name from the export |
+| AMFI Scheme Code | Exact AMFI code when one unique scheme match is found |
 | Category | Groww category |
 | Sub-category | Groww sub-category |
 | Folio No. | Distinguishes holdings in separate folios |
@@ -32,6 +33,14 @@ Use a separate `Current Holdings` tab so the Groww upload does not overwrite the
 | Last Updated | Timestamp when MFHelper successfully imported the export |
 
 The `Statement Date` and `Last Updated` have different meanings: the first is the date the holdings values represent; the second is when MFHelper processed that file. `Last Updated` is repeated on each row so the data remains a normal rectangular table for filtering and analysis.
+
+## AMFI Scheme Code Matching
+
+- Match the detailed Groww scheme name and fund house against the AMFI scheme catalogue, including plan and option details such as Direct Growth.
+- Populate the code only when one unique matching scheme is found.
+- If there is no match or more than one possible match, keep the holding and leave the code blank; show a review status for that row.
+- An unresolved code must not reject the upload or be inferred from a similar fund name.
+- Matching does not depend on the fund being active in `funds.yaml`; inactive or unconfigured holdings still belong in the user's current-holdings view.
 
 ## Refresh Behavior
 
@@ -59,5 +68,5 @@ The alert should use only the latest successful statement. It can compare trigge
 ## Questions for Approval
 
 1. Approve giving the Vercel importer Google Sheets credentials so it can write the `Current Holdings` tab. The sheet remains the single current-state source; no holdings copy is kept in Vercel Blob.
-2. Confirm the proposed `Current Holdings` columns, including XIRR and folio number.
+2. Confirm the proposed `Current Holdings` columns, including AMFI Scheme Code, XIRR, and folio number.
 3. Confirm that each successful upload replaces the whole table and no history is retained.
