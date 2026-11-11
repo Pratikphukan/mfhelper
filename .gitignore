@@ -31,6 +31,8 @@ gcp-credentials.json
 check.py
 _site/
 index.html
+*.xlsx
+*.pdf
 
 # Vercel importer
 node_modules/

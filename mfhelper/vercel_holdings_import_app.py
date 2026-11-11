@@ -395,6 +395,23 @@ const submit = document.getElementById('submit');
 const MAX_BYTES = %(max_bytes)d;
 const PDF_TYPE = 'application/pdf';
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const ALLOWED_XLSX_TYPES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/x-vnd.oasis.opendocument.spreadsheet',
+  'application/zip',
+  'application/octet-stream',
+];
+function isMimeAllowed(fileType, selectedType) {
+  if (!fileType) return true;
+  if (selectedType === 'cas_pdf') {
+    return fileType === PDF_TYPE || fileType === 'application/x-pdf' || fileType === 'application/octet-stream';
+  }
+  if (selectedType === 'groww_xlsx') {
+    return ALLOWED_XLSX_TYPES.includes(fileType);
+  }
+  return true;
+}
 function show(message, isError) {
   statusBox.className = 'notice ' + (isError ? 'error' : 'success');
   statusBox.textContent = message;
@@ -435,7 +452,7 @@ form.addEventListener('submit', async (event) => {
   if (!file) { show('Choose a CDSL CAS PDF or Groww XLSX file.', true); return; }
   const selected = selectedUpload(file);
   if (!selected) { show('Choose a PDF or XLSX file.', true); return; }
-  if (file.type && file.type !== selected.contentType) { show('The file type does not match its file name.', true); return; }
+  if (file.type && !isMimeAllowed(file.type, selected.type)) { show('The file type does not match its file name.', true); return; }
   if (file.size > MAX_BYTES) { show('The file is too large (maximum 25 MB).', true); return; }
   if (selected.type === 'cas_pdf' && !panInput.value.trim()) { show('Enter the PDF password.', true); return; }
   submit.disabled = true;

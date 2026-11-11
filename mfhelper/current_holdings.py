@@ -72,9 +72,10 @@ def read_current_holdings(
     statement_dates: set[date] = set()
     values_by_code: dict[str, Decimal] = {}
     total = Decimal(0)
-    for row in rows[1:]:
-        if len(row) < len(HEADERS) or not any(str(value).strip() for value in row):
+    for raw_row in rows[1:]:
+        if not any(str(value).strip() for value in raw_row):
             continue
+        row = list(raw_row) + [""] * max(0, len(HEADERS) - len(raw_row))
         code = str(row[1]).strip()
         status = str(row[2]).strip()
         current = _decimal(row[8])

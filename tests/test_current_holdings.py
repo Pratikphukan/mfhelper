@@ -59,6 +59,23 @@ def test_reads_latest_holdings_and_aggregates_folios_by_amfi_code():
     assert "No holding recorded" in context.note_for("999")
 
 
+def test_reads_holdings_with_short_rows_missing_trailing_cells():
+    # Row missing the 13th column (Last Updated)
+    short_rows = [
+        list(HEADERS),
+        ["Fund A", "123", "exact_config", "Equity", "Flexi", "1", "1", "100", "150", "50", "0.1", "2026-11-10"],
+    ]
+    spreadsheet = FakeSpreadsheet(short_rows)
+    context = read_current_holdings(
+        spreadsheet_id="spreadsheet-id",
+        credentials_path=None,
+        token_path=None,
+        client_factory=lambda _credentials, _token: FakeClient(spreadsheet),
+    )
+    assert context.total_current_value == Decimal("150")
+    assert context.current_value_by_code == {"123": Decimal("150")}
+
+
 @pytest.mark.parametrize(
     "rows",
     [[], [["unexpected header"]], [list(HEADERS), ["Fund", "123", "exact_config", "Equity", "Flexi", "1", "1", "100", "bad", "0", "", "2026-11-10", "now"]]],
