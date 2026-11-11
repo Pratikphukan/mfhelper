@@ -38,7 +38,7 @@ function fakes() {
   };
 }
 
-test('mints a private, single-file, PDF-only, size-limited PUT URL', async () => {
+test('mints a private, single-file, PDF-only, size-limited PUT URL for a CAS ticket', async () => {
   const f = fakes();
   const result = await createPresign({
     ticket: ticket(),
@@ -68,6 +68,24 @@ test('mints a private, single-file, PDF-only, size-limited PUT URL', async () =>
   assert.equal(options.operation, 'put');
   assert.equal(options.allowOverwrite, false);
   assert.equal(options.addRandomSuffix, false);
+});
+
+test('mints an XLSX-only upload URL for a Groww ticket', async () => {
+  const f = fakes();
+  const result = await createPresign({
+    ticket: ticket({ upload_type: 'groww_xlsx' }),
+    secret: SECRET,
+    issueSignedToken: f.issueSignedToken,
+    presignUrl: f.presignUrl,
+    claimTicket: async () => {},
+    now: () => NOW_MS,
+    randomId: () => 'groww-123',
+  });
+
+  assert.equal(result.pathname, 'tmp/groww-123.xlsx');
+  assert.equal(result.content_type, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  assert.deepEqual(f.calls.issue[0].allowedContentTypes, [result.content_type]);
+  assert.equal(f.calls.issue[0].pathname, 'tmp/groww-123.xlsx');
 });
 
 test('never calls Blob when the ticket is invalid or expired', async () => {

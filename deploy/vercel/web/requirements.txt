@@ -6,3 +6,6 @@ pdfplumber>=0.11,<1
 pypdf>=5,<7
 requests>=2.32,<3
 vercel-blob>=0.5,<1
+openpyxl>=3.1,<4
+gspread>=6.1,<7
+google-auth>=2.40,<3

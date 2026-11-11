@@ -22,7 +22,9 @@ class VercelStorageError(ValueError):
 ACCESS = "private"
 SNAPSHOT_PATH = "holdings/current.json"
 TEMP_PREFIX = "tmp/"
-TEMP_PATHNAME_RE = re.compile(r"^tmp/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.pdf$")
+TEMP_PATHNAME_RE = re.compile(r"^tmp/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.(?:pdf|xlsx)$")
+TEMP_PDF_PATHNAME_RE = re.compile(r"^tmp/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.pdf$")
+TEMP_XLSX_PATHNAME_RE = re.compile(r"^tmp/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.xlsx$")
 CLAIM_PATHNAME_RE = re.compile(r"^tmp/used-tickets/[A-Za-z0-9_-]{16,64}\.json$")
 STALE_AFTER = timedelta(minutes=15)
 # Vercel Blob's minimum cache lifetime; limits how long a stale snapshot can be read.
@@ -43,12 +45,24 @@ class VercelHoldingsStore:
 
     @staticmethod
     def validate_temp_pathname(pathname: object) -> str:
-        """Accept only server-issued ``tmp/<name>.pdf`` pathnames."""
+        """Accept only server-issued PDF or XLSX temporary pathnames."""
         if not isinstance(pathname, str) or not TEMP_PATHNAME_RE.fullmatch(pathname):
             raise VercelStorageError("The uploaded file reference is invalid. Upload the statement again.")
         return pathname
 
     async def read_temp_pdf(self, pathname: str) -> bytes:
+        pathname = self.validate_temp_pathname(pathname)
+        if not TEMP_PDF_PATHNAME_RE.fullmatch(pathname):
+            raise VercelStorageError("The uploaded file type is invalid. Upload the statement again.")
+        return await self.read_temp_file(pathname)
+
+    async def read_temp_xlsx(self, pathname: str) -> bytes:
+        pathname = self.validate_temp_pathname(pathname)
+        if not TEMP_XLSX_PATHNAME_RE.fullmatch(pathname):
+            raise VercelStorageError("The uploaded file type is invalid. Upload the workbook again.")
+        return await self.read_temp_file(pathname)
+
+    async def read_temp_file(self, pathname: str) -> bytes:
         pathname = self.validate_temp_pathname(pathname)
         try:
             head = await self.blob.head_blob(pathname)
@@ -58,14 +72,14 @@ class VercelHoldingsStore:
             raise VercelStorageError("The uploaded statement could not be read.") from exc
         size = getattr(head, "size", None)
         if not isinstance(size, int) or size <= 0 or size > MAX_UPLOAD_BYTES:
-            raise VercelStorageError("The PDF is too large (maximum 25 MB) or empty.")
+            raise VercelStorageError("The uploaded file is too large (maximum 25 MB) or empty.")
         try:
             result = await self.blob.get_blob(pathname, access=ACCESS)
         except Exception as exc:
             raise VercelStorageError("The uploaded statement could not be read.") from exc
         body = bytes(result.body)
         if len(body) > MAX_UPLOAD_BYTES:
-            raise VercelStorageError("The PDF is too large (maximum 25 MB) or empty.")
+            raise VercelStorageError("The uploaded file is too large (maximum 25 MB) or empty.")
         return body
 
     async def delete_temp(self, pathname: object) -> bool:

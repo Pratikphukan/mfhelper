@@ -68,9 +68,12 @@ def test_vendored_service_imports_without_the_rest_of_the_repo(tmp_path):
 def test_service_requirements_stay_light():
     requirements = (WEB / "requirements.txt").read_text().lower()
 
-    for heavy in ("matplotlib", "yfinance", "gspread", "anthropic", "mcp", "pandas", "oci"):
+    for heavy in ("matplotlib", "yfinance", "anthropic", "mcp", "pandas", "oci"):
         assert heavy not in requirements.replace("python-multipart", "")
     assert "vercel-blob" in requirements
+    assert "openpyxl" in requirements
+    assert "gspread" in requirements
+    assert "google-auth" in requirements
 
 
 def test_vercel_json_routes_only_the_two_services_and_exposes_nothing_else():
