@@ -91,3 +91,39 @@ def test_rejects_incomplete_holding_row():
 def test_rejects_non_xlsx_input(payload):
     with pytest.raises(GrowwImportError, match="not a valid XLSX"):
         parse_groww_xlsx(payload)
+
+
+def test_finds_statement_date_in_adjacent_cell():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Holdings"
+    # Label in column A, date in column B
+    sheet.append(["HOLDINGS AS ON", "2026-11-10"])
+    sheet.append([
+        "Scheme Name", "Category", "Sub-category", "Folio No.", "Units",
+        "Invested Value", "Current Value", "Returns", "XIRR",
+    ])
+    sheet.append([
+        "Sample Flexi Cap Direct Growth", "Equity", "Flexi Cap", "001234567890",
+        12.5, 10000, 11250.5, 1250.5, "6.5%",
+    ])
+    output = BytesIO()
+    workbook.save(output)
+
+    snapshot = parse_groww_xlsx(output.getvalue())
+    assert snapshot.statement_date == date(2026, 11, 10)
+
+
+def test_rejects_oversized_worksheet_dimensions():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Holdings"
+    sheet.append(["HOLDINGS AS ON 2026-11-10"])
+
+    from unittest.mock import patch
+    from openpyxl.worksheet._read_only import ReadOnlyWorksheet
+    with patch.object(ReadOnlyWorksheet, "max_row", 5001):
+        output = BytesIO()
+        workbook.save(output)
+        with pytest.raises(GrowwImportError, match="unsupported sheet size"):
+            parse_groww_xlsx(output.getvalue())

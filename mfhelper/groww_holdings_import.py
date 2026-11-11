@@ -64,6 +64,10 @@ def parse_groww_xlsx(payload: bytes) -> GrowwHoldingsSnapshot:
         tables: list[tuple[object, int, dict[str, int]]] = []
         statement_dates: set[date] = set()
         for worksheet in workbook.worksheets:
+            if (worksheet.max_row and worksheet.max_row > MAX_SCAN_ROWS) or (
+                worksheet.max_column and worksheet.max_column > MAX_SCAN_COLUMNS
+            ):
+                raise GrowwImportError("The workbook has an unsupported sheet size. No sheet data was changed.")
             rows = worksheet.iter_rows(
                 min_row=1,
                 max_row=min(worksheet.max_row or MAX_SCAN_ROWS, MAX_SCAN_ROWS),
@@ -143,7 +147,7 @@ def _find_statement_dates(rows: Iterable[tuple[object, ...]]) -> set[date]:
             if isinstance(value, (datetime, date)):
                 continue
             text = str(value or "")
-            match = re.search(r"holdings\s+as\s+on\s*[:\-]?\s*(.+)$", text, re.IGNORECASE)
+            match = re.search(r"holdings\s+as\s+on\s*[:\-]?\s*(.*)$", text, re.IGNORECASE)
             if match:
                 parsed = _parse_date_text(match.group(1))
                 if parsed:
