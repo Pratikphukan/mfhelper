@@ -6,13 +6,16 @@ import pytest
 from mfhelper.groww_holdings_import import GrowwHolding, GrowwHoldingsSnapshot
 import mfhelper.groww_holdings_sheet as holdings_sheet
 from mfhelper.groww_holdings_sheet import (
+    FUND_CODE_MAP_HEADERS,
     HEADERS,
     CurrentHoldingsSheetWriter,
+    FundCodeMapSheetReader,
     HoldingsSheetError,
     make_sheet_values,
     match_scheme_code,
     normalize_scheme_name,
     parse_fund_code_map,
+    parse_fund_code_map_rows,
 )
 
 
@@ -223,3 +226,86 @@ def test_sheet_with_unexpected_existing_header_is_left_unchanged():
         writer.replace([list(HEADERS)])
 
     assert spreadsheet.requests is None
+
+
+def test_parse_fund_code_map_rows_valid():
+    rows = [
+        list(FUND_CODE_MAP_HEADERS),
+        ["JM Flexi Cap Fund Direct Growth", "120492"],
+        ["Motilal Oswal Midcap Fund Direct Growth", 127042],
+        ["", ""],  # empty row ignored
+    ]
+    mapping = parse_fund_code_map_rows(rows)
+    assert mapping[normalize_scheme_name("JM Flexi Cap Fund Direct Growth")] == ("120492",)
+    assert mapping[normalize_scheme_name("Motilal Oswal Midcap Fund Direct Growth")] == ("127042",)
+
+
+@pytest.mark.parametrize(
+    "rows,match",
+    [
+        ([], "must start with Scheme Name"),
+        ([["Wrong Header", "AMFI"]], "must start with Scheme Name"),
+        ([list(FUND_CODE_MAP_HEADERS), ["", "120492"]], "invalid row 2"),
+        ([list(FUND_CODE_MAP_HEADERS), ["Fund Name", "not-a-code"]], "invalid row 2"),
+    ],
+)
+def test_parse_fund_code_map_rows_malformed(rows, match):
+    with pytest.raises(HoldingsSheetError, match=match):
+        parse_fund_code_map_rows(rows)
+
+
+def test_fund_code_map_sheet_reader_success():
+    class FakeMapWorksheet:
+        def get(self, _range, **_kwargs):
+            return [
+                list(FUND_CODE_MAP_HEADERS),
+                ["Sample Fund Direct Growth", "123456"],
+            ]
+
+    class FakeSpreadsheetWithMap:
+        def worksheet(self, name):
+            assert name == "Fund Code Map"
+            return FakeMapWorksheet()
+
+    reader = FundCodeMapSheetReader(
+        spreadsheet_id="fake-id",
+        service_account_info={},
+        client_factory=lambda _info: FakeClient(FakeSpreadsheetWithMap()),
+    )
+    result = reader.read()
+    assert result[normalize_scheme_name("Sample Fund Direct Growth")] == ("123456",)
+
+
+def test_fund_code_map_sheet_reader_missing_tab():
+    import gspread
+
+    class FakeSpreadsheetMissing:
+        def worksheet(self, _name):
+            raise gspread.WorksheetNotFound("Fund Code Map")
+
+    reader = FundCodeMapSheetReader(
+        spreadsheet_id="fake-id",
+        service_account_info={},
+        client_factory=lambda _info: FakeClient(FakeSpreadsheetMissing()),
+    )
+    with pytest.raises(HoldingsSheetError, match="Fund Code Map' tab was not found"):
+        reader.read()
+
+
+def test_atomic_replace_clears_full_width_when_old_grid_has_extra_columns():
+    class FakeWideWorksheet(FakeWorksheet):
+        col_count = 16  # Old sheet has 16 columns, new HEADERS has 13
+
+    worksheet = FakeWideWorksheet(list(HEADERS))
+    spreadsheet = FakeSpreadsheet(worksheet)
+    writer = CurrentHoldingsSheetWriter(
+        spreadsheet_id="fake-id",
+        service_account_info={},
+        client_factory=lambda _info: FakeClient(spreadsheet),
+    )
+    writer.replace([list(HEADERS)])
+
+    update = spreadsheet.requests[1]["updateCells"]
+    # Verify update range clears all 16 columns
+    assert update["range"]["endColumnIndex"] == 16
+    assert len(update["rows"][0]["values"]) == 16

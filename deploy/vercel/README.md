@@ -14,14 +14,14 @@ Vercel Services is a Beta feature. Routes are defined in the repository's `verce
 1. Sign in with the GitHub account allowed by `GITHUB_ALLOWED_LOGIN`.
 2. Select a Groww XLSX export on the import page.
 3. The browser uploads it directly to a private Vercel Blob path named `tmp/<random>.xlsx`.
-4. Python reads the detailed holdings table, ignores personal details and the overall summary, then replaces the `Current Holdings` tab in Google Sheets.
+4. Python reads the detailed holdings table, ignores personal details and the overall summary, reads the `Fund Code Map` tab, then replaces the `Current Holdings` tab in Google Sheets.
 5. The temporary XLSX is deleted after processing, whether import succeeds or fails.
 
 The sheet contains one current row per fund and folio. It includes the Groww fund, category, folio, units, invested/current values, returns and XIRR, plus AMFI code, statement date and MFHelper's `Last Updated` timestamp. It omits AMC, Source, personal details and Groww's summary. Each successful upload replaces the previous rows; MFHelper keeps no upload history.
 
-AMFI scheme codes are matched first by exact normalized name against `MFHELPER_FUND_CODE_MAP`. If that does not give one code, MFHelper searches MFAPI by the full scheme name and accepts only one exact Direct Growth result. MFAPI wording may include harmless `Plan` or `Option` words. It rejects Regular, IDCW, and dividend options. Results are cached for 24 hours per warm service instance. If MFAPI is unavailable, no exact candidate is found, or multiple codes match, the code stays blank and the row is marked for review; the upload continues.
+AMFI scheme codes are matched first by exact normalized name against the private `Fund Code Map` tab. If that does not give one code, MFHelper searches MFAPI by the full scheme name and accepts only one exact Direct Growth result. MFAPI wording may include harmless `Plan` or `Option` words. It rejects Regular, IDCW, and dividend options. Results are cached for 24 hours per warm service instance. If MFAPI is unavailable, no exact candidate is found, or multiple codes match, the code stays blank and the row is marked for review; the upload continues.
 
-The private mapping should contain only the fund names and AMFI codes from your `funds.yaml`. MFAPI is a secondary lookup source and should not be treated as the source of truth for ambiguous matches.
+The private `Fund Code Map` tab must have `Scheme Name` and `AMFI Scheme Code` in cells A1 and B1. Add one scheme and AMFI code per row. Blank rows are ignored; any nonblank row with a missing name or invalid code stops the import and preserves the previous `Current Holdings` data. Conflicting duplicate names are treated as ambiguous and sent to the MFAPI fallback. MFAPI is a secondary lookup source and should not be treated as the source of truth for ambiguous matches.
 
 The Daily NAV GitHub Action can read `Current Holdings` with its existing Google Sheets credentials and show the reported holding value/share and statement date alongside triggered alerts. This context does not change signal thresholds or investment suggestions. Transactions after the statement date are not reflected until another upload.
 
@@ -42,15 +42,8 @@ The Daily NAV GitHub Action can read `Current Holdings` with its existing Google
    | `GITHUB_ALLOWED_LOGIN` | Your GitHub login |
    | `MFHELPER_SPREADSHEET_ID` | The ID from your Google Sheets URL |
    | `MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON` | The full service-account JSON, stored as a secret |
-   | `MFHELPER_FUND_CODE_MAP` | JSON list of `{ "name": "fund name", "code": "AMFI code" }` entries |
 
-   Example mapping format (use your configured fund names and codes):
-
-   ```json
-   [{"name":"Example Fund Direct Growth","code":"123456"}]
-   ```
-
-   Generate random secrets with `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Never commit service-account JSON or the private fund mapping.
+   Generate random secrets with `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Keep the service-account JSON private. The fund mapping stays in the private Google Sheet and no longer needs a Vercel environment variable.
 5. Deploy the project. The web build runs `vendor.py`; its output should say `vendored 8 mfhelper modules`.
 6. Open the Production URL, sign in, and upload a Groww XLSX. If `Current Holdings` does not exist, the first successful import creates it. A tab with a different header layout is left unchanged and needs manual review.
 

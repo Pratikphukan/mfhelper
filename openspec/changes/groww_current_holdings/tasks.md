@@ -1,10 +1,10 @@
 # Tasks: Groww Current Holdings
 
 - [x] Confirm the tab schema, daily-alert data source, and replace-current-state behavior.
-- [x] Read the minimal `MFHELPER_FUND_CODE_MAP` Vercel Secret containing only fund names and AMFI codes.
-- [x] Document Vercel setup for the Google Sheets credential and fund-code mapping Secret.
+- [x] Read the private `Fund Code Map` tab from Google Sheets for fund names and AMFI codes.
+- [x] Document Google Sheets setup for the service account credential and `Fund Code Map` tab.
 - [x] Add safe parsing and validation for Groww XLSX exports.
-- [x] Match holdings via the private mapping first, then use MFAPI for one exact Direct Growth match; retain unmatched rows without guessing.
+- [x] Match holdings via the Google Sheet map first, then use MFAPI for one exact Direct Growth match; retain unmatched rows without guessing.
 - [x] Refresh the `Current Holdings` tab only after the complete export validates.
 - [x] Preserve existing sheet contents if parsing, validation, or the sheet update fails.
 - [x] Make the latest imported holdings available to the daily alert and surface the statement date.
