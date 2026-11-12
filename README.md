@@ -17,11 +17,13 @@ Your morning alerts are driven by a **Decision-Making Confluence Engine**. Inste
 * **Market Regime Awareness (optional, off by default):** With `regime.enable: true` in `config/alerts.yaml`, buy alerts get advice from the broad market (NIFTY 500 vs its 50/200D SMA plus a 5-day average India VIX) and a suggested size from the Nifty 50 P/E. It never hides an alert. See [Market regime and valuation context](#market-regime-and-valuation-context).
 
 ### 2. 🗺️ Portfolio Overlap Analyzer (`overlap_main.py`)
-Are you secretly holding multiple mutual funds that invest in the exact same stocks?
-* Computes the **minimum-weight portfolio intersection** between all your funds.
-* Prints a beautifully aligned **Pairwise Overlap Matrix Table** in the terminal.
-* Applies a **90% Relevance Concentration Rule**: lists the detailed stock allocations for those stocks contributing to 90% of the overlap, while cleanly grouping the minor ones at the bottom to eliminate clutter.
-* Automatically writes this detailed matrix and stock-level reports to a custom **`Portfolio Overlap`** tab in your Google Sheet!
+Are your actual fund holdings concentrated in the same underlying stocks?
+* Reads positions and current values from the Google Sheet's `Current Holdings` tab, and resolves scheme names with `Fund Code Map` (it does not use `config/funds.yaml`).
+* Combines separate folios for the same AMFI scheme and weights each fund's constituent stocks by the value reported in your Groww statement.
+* Shows the largest estimated stock exposures as rupees and as a share of the reported portfolio, with data coverage and unresolved funds called out.
+* Keeps the **Pairwise Overlap Matrix** and detailed stock breakdown as supporting sections in the same `Portfolio Overlap` tab.
+* Displays the Groww statement date and marks it stale after 30 days. Constituent holdings are the latest data returned by Tickertape; that API does not provide an as-of date in this report.
+* Use `--dev` to read `Current Holdings (Dev)` and write `Portfolio Overlap (Dev)` for safe verification.
 * To compare one fund with the other **active** funds only, use `fund_overlap_main.py`; it prints the result locally and does not write to a Google Sheet.
 
 ### 3. 🎨 Interactive Performance & Risk Web Dashboard (`dashboard_main.py`)
@@ -599,11 +601,11 @@ Plots and benchmark caches are git-ignored by default (`data/fund_plots/`, `data
 ## 🏆 Running the Advanced Analyzers
 
 ### 1. The Portfolio Overlap Analyzer
-To inspect the stock-level overlap and find hidden concentration risks across your mutual funds:
+To inspect portfolio-weighted stock exposure and pairwise fund overlap:
 ```bash
 .venv/bin/python overlap_main.py
 ```
-*(This will output the overlap matrix table, perform the 90% relevance analysis, and automatically update your Google Sheet!)*
+This reads `Fund Code Map` and `Current Holdings`, fetches the available fund constituent data, and refreshes the `Portfolio Overlap` tab. It replaces that tab's existing report. Use `--dev` to read `Current Holdings (Dev)` and write `Portfolio Overlap (Dev)` instead.
 
 To compare any fund with the active funds in `config/funds.yaml`, pass its AMFI scheme code. The target fund does not need to be listed in the YAML; that file supplies the comparison funds. If the target is listed but marked inactive, it is still used as the target and excluded from the comparison list.
 
