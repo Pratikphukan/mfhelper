@@ -178,7 +178,6 @@ def test_groww_upload_ticket_requires_settings_and_is_scoped_to_xlsx(monkeypatch
     monkeypatch.setenv("MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON", json.dumps({
         "client_email": "service@example.com", "private_key": "fake-key",
     }))
-    monkeypatch.setenv("MFHELPER_FUND_CODE_MAP", '[{"name":"Sample Direct Growth","code":"123456"}]')
     response = client.post("/upload-ticket", json={"form_token": token, "upload_type": "groww_xlsx"})
 
     assert response.status_code == 200
@@ -196,7 +195,6 @@ def test_groww_import_updates_sheet_and_discards_workbook(monkeypatch):
     monkeypatch.setenv("MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON", json.dumps({
         "client_email": "service@example.com", "private_key": "fake-key",
     }))
-    monkeypatch.setenv("MFHELPER_FUND_CODE_MAP", '[{"name":"Sample Direct Growth","code":"123456"}]')
     captured = {}
 
     class FakeWriter:
@@ -206,7 +204,15 @@ def test_groww_import_updates_sheet_and_discards_workbook(monkeypatch):
         def replace(self, values):
             captured["values"] = values
 
+    class FakeMapReader:
+        def __init__(self, **kwargs):
+            captured["map_reader_settings"] = kwargs
+
+        def read(self):
+            return {"sample direct growth": ("123456",)}
+
     monkeypatch.setattr(import_app, "CurrentHoldingsSheetWriter", FakeWriter)
+    monkeypatch.setattr(import_app, "FundCodeMapSheetReader", FakeMapReader)
     response = client.post("/import", json={
         "blob_pathname": "tmp/groww.xlsx", "upload_type": "groww_xlsx", "form_token": token,
     })
@@ -228,7 +234,6 @@ def test_invalid_groww_workbook_does_not_write_and_is_deleted(monkeypatch):
     monkeypatch.setenv("MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON", json.dumps({
         "client_email": "service@example.com", "private_key": "fake-key",
     }))
-    monkeypatch.setenv("MFHELPER_FUND_CODE_MAP", '[{"name":"Fund","code":"123"}]')
     monkeypatch.setattr(import_app, "CurrentHoldingsSheetWriter", lambda **_kwargs: pytest.fail("invalid workbook touched Sheets"))
 
     response = client.post("/import", json={

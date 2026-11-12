@@ -25,9 +25,9 @@ from mfhelper.casl_import import CasImportError, parse_cdsl_cas
 from mfhelper.groww_holdings_import import GrowwImportError, parse_groww_xlsx
 from mfhelper.groww_holdings_sheet import (
     CurrentHoldingsSheetWriter,
+    FundCodeMapSheetReader,
     HoldingsSheetError,
     make_sheet_values,
-    parse_fund_code_map,
 )
 from mfhelper.upload_ticket import MAX_UPLOAD_BYTES, MIN_SECRET_LENGTH, UPLOAD_TYPES, TicketError, mint_ticket
 from mfhelper.vercel_holdings_cache import VercelHoldingsStore, VercelStorageError
@@ -77,22 +77,20 @@ def _store() -> VercelHoldingsStore:
     return VercelHoldingsStore()
 
 
-def _groww_settings() -> tuple[str, dict[str, object], dict[str, tuple[str, ...]]]:
+def _groww_settings() -> tuple[str, dict[str, object]]:
     spreadsheet_id = os.environ.get("MFHELPER_SPREADSHEET_ID", "").strip()
     account_json = os.environ.get("MFHELPER_GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    code_map_json = os.environ.get("MFHELPER_FUND_CODE_MAP", "").strip()
-    if not spreadsheet_id or not account_json or not code_map_json:
+    if not spreadsheet_id or not account_json:
         raise AppConfigurationError("The Groww import is not fully configured.")
     try:
         account_info = json.loads(account_json)
         if not isinstance(account_info, dict):
             raise ValueError("service account config is not an object")
-        code_map = parse_fund_code_map(code_map_json)
     except (ValueError, TypeError) as exc:
         raise AppConfigurationError("The Groww import is not fully configured.") from exc
     if not isinstance(account_info.get("client_email"), str) or not isinstance(account_info.get("private_key"), str):
         raise AppConfigurationError("The Groww import is not fully configured.")
-    return spreadsheet_id, account_info, code_map
+    return spreadsheet_id, account_info
 
 
 def _groww_is_configured() -> bool:
@@ -314,9 +312,15 @@ async def import_statement(request: Request) -> JSONResponse:
             parsed = await asyncio.to_thread(parse_cdsl_cas, pdf_bytes, pan)
             status = await store.save_snapshot(parsed)
         else:
-            spreadsheet_id, account_info, code_map = _groww_settings()
+            spreadsheet_id, account_info = _groww_settings()
             xlsx_bytes = await store.read_temp_xlsx(pathname)
             parsed = await asyncio.to_thread(parse_groww_xlsx, xlsx_bytes)
+            code_map = await asyncio.to_thread(
+                FundCodeMapSheetReader(
+                    spreadsheet_id=spreadsheet_id,
+                    service_account_info=account_info,
+                ).read
+            )
             values, unmatched = await asyncio.to_thread(make_sheet_values, parsed, code_map)
             writer = CurrentHoldingsSheetWriter(
                 spreadsheet_id=spreadsheet_id,

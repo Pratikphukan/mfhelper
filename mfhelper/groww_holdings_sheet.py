@@ -19,6 +19,9 @@ from mfhelper.groww_holdings_import import GrowwHoldingsSnapshot
 
 
 TAB_NAME = "Current Holdings"
+FUND_CODE_MAP_TAB_NAME = "Fund Code Map"
+FUND_CODE_MAP_HEADERS = ("Scheme Name", "AMFI Scheme Code")
+MAX_FUND_CODE_MAP_ENTRIES = 500
 HEADERS = (
     "Scheme Name",
     "AMFI Scheme Code",
@@ -47,7 +50,7 @@ class HoldingsSheetError(ValueError):
 
 
 def parse_fund_code_map(raw: str) -> dict[str, tuple[str, ...]]:
-    """Parse the minimal JSON list copied from the user's private funds.yaml."""
+    """Parse a JSON representation of the fund-to-AMFI-code mapping."""
     if not isinstance(raw, str) or not raw.strip() or len(raw) > 64 * 1024:
         raise HoldingsSheetError("The AMFI fund-code mapping is not configured.")
     try:
@@ -57,13 +60,64 @@ def parse_fund_code_map(raw: str) -> dict[str, tuple[str, ...]]:
     if not isinstance(entries, list) or not entries or len(entries) > 500:
         raise HoldingsSheetError("The AMFI fund-code mapping must be a non-empty list of funds.")
 
-    by_name: dict[str, set[str]] = {}
+    pairs: list[tuple[object, object]] = []
     for item in entries:
         if not isinstance(item, dict):
             raise HoldingsSheetError("Each AMFI mapping entry must contain a fund name and code.")
-        name = item.get("name")
-        code = item.get("code")
-        if not isinstance(name, str) or not name.strip() or not isinstance(code, (str, int)):
+        pairs.append((item.get("name"), item.get("code")))
+    return _fund_code_map_from_pairs(pairs)
+
+
+def parse_fund_code_map_rows(rows: Iterable[Iterable[object]]) -> dict[str, tuple[str, ...]]:
+    """Validate the Fund Code Map tab and return its normalized name lookup."""
+    values = [list(row) for row in rows]
+    if not values:
+        raise HoldingsSheetError(
+            "The 'Fund Code Map' tab must start with Scheme Name and AMFI Scheme Code headers. "
+            "No holdings were changed."
+        )
+
+    header = [str(value or "").strip() for value in values[0][:2]]
+    if header != list(FUND_CODE_MAP_HEADERS):
+        raise HoldingsSheetError(
+            "The 'Fund Code Map' tab must start with Scheme Name and AMFI Scheme Code headers. "
+            "No holdings were changed."
+        )
+
+    pairs: list[tuple[object, object]] = []
+    for row_number, row in enumerate(values[1:], start=2):
+        name = row[0] if row else ""
+        code = row[1] if len(row) > 1 else ""
+        if not _cell_text(name) and not _cell_text(code):
+            continue
+        if not isinstance(name, str) or not name.strip():
+            raise HoldingsSheetError(
+                f"The 'Fund Code Map' tab has an invalid row {row_number}. "
+                "Check that it has a scheme name and a numeric AMFI code. "
+                "No holdings were changed."
+            )
+        try:
+            pairs.append((name, _validated_sheet_code(code)))
+        except ValueError as exc:
+            raise HoldingsSheetError(
+                f"The 'Fund Code Map' tab has an invalid row {row_number}. "
+                "Check that it has a scheme name and a numeric AMFI code. "
+                "No holdings were changed."
+            ) from exc
+    if len(pairs) > MAX_FUND_CODE_MAP_ENTRIES:
+        raise HoldingsSheetError(
+            f"The 'Fund Code Map' tab has more than {MAX_FUND_CODE_MAP_ENTRIES} entries. "
+            "No holdings were changed."
+        )
+    return _fund_code_map_from_pairs(pairs)
+
+
+def _fund_code_map_from_pairs(pairs: Iterable[tuple[object, object]]) -> dict[str, tuple[str, ...]]:
+    by_name: dict[str, set[str]] = {}
+    for name, code in pairs:
+        if not isinstance(name, str) or not name.strip():
+            raise HoldingsSheetError("Each AMFI mapping entry must contain a fund name and code.")
+        if not isinstance(code, (str, int)) or isinstance(code, bool):
             raise HoldingsSheetError("Each AMFI mapping entry must contain a fund name and code.")
         code = str(code).strip()
         if not code or not code.isdigit() or len(code) > 12:
@@ -73,6 +127,28 @@ def parse_fund_code_map(raw: str) -> dict[str, tuple[str, ...]]:
             raise HoldingsSheetError("A fund name in the AMFI mapping is invalid.")
         by_name.setdefault(normalized, set()).add(code)
     return {name: tuple(sorted(codes)) for name, codes in by_name.items()}
+
+
+def _cell_text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _validated_sheet_code(value: object) -> str:
+    if isinstance(value, bool):
+        raise ValueError("boolean is not an AMFI code")
+    if isinstance(value, int):
+        code = str(value)
+    elif isinstance(value, float) and value.is_integer():
+        code = str(int(value))
+    elif isinstance(value, str):
+        code = value.strip()
+    else:
+        raise ValueError("invalid AMFI code cell")
+    if not code or not code.isdigit() or len(code) > 12:
+        raise ValueError("invalid AMFI code")
+    return code
 
 
 def normalize_scheme_name(value: str) -> str:
@@ -265,6 +341,46 @@ class CurrentHoldingsSheetWriter:
         except Exception as exc:
             raise HoldingsSheetError(
                 "Google Sheets could not update the current holdings. The previous data was preserved."
+            ) from exc
+
+
+class FundCodeMapSheetReader:
+    """Read the user's private fund-to-AMFI-code map from Google Sheets."""
+
+    def __init__(
+        self,
+        *,
+        spreadsheet_id: str,
+        service_account_info: dict[str, object],
+        client_factory: Callable[[dict[str, object]], object] | None = None,
+        worksheet_name: str = FUND_CODE_MAP_TAB_NAME,
+    ) -> None:
+        self.spreadsheet_id = spreadsheet_id
+        self.service_account_info = service_account_info
+        self.client_factory = client_factory or _service_account_client
+        self.worksheet_name = worksheet_name
+
+    def read(self) -> dict[str, tuple[str, ...]]:
+        try:
+            client = self.client_factory(self.service_account_info)
+            spreadsheet = client.open_by_key(self.spreadsheet_id)
+            try:
+                worksheet = spreadsheet.worksheet(self.worksheet_name)
+            except Exception as exc:
+                if _is_worksheet_missing(exc):
+                    raise HoldingsSheetError(
+                        "The 'Fund Code Map' tab was not found. Create it with the required headers. "
+                        "No holdings were changed."
+                    ) from exc
+                raise
+            rows = worksheet.get("A:B", value_render_option="UNFORMATTED_VALUE")
+            return parse_fund_code_map_rows(rows)
+        except HoldingsSheetError:
+            raise
+        except Exception as exc:
+            raise HoldingsSheetError(
+                "Google Sheets could not read the 'Fund Code Map' tab. "
+                "The previous holdings data was preserved."
             ) from exc
 
 
