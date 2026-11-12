@@ -201,3 +201,7 @@ def test_overlap_writer_places_portfolio_exposure_before_pairwise_matrix(monkeyp
     assert stock_row[2] == 100
     assert stock_row[3] == 0.1
     assert worksheet.cleared
+    requests = worksheet.spreadsheet.format_requests
+    wrap_request = next(request["repeatCell"] for request in requests if "repeatCell" in request)
+    assert wrap_request["cell"]["userEnteredFormat"]["wrapStrategy"] == "WRAP"
+    assert any("autoResizeDimensions" in request for request in requests)

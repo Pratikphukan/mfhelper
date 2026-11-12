@@ -229,7 +229,13 @@ class OverlapSheetWriter:
         ))
 
         sheet_id = worksheet._properties["sheetId"]
-        requests_payload: list[dict] = []
+        requests_payload: list[dict] = [{"repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": row_count,
+                      "startColumnIndex": 0, "endColumnIndex": column_count},
+            "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP",
+                                            "verticalAlignment": "TOP"}},
+            "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment",
+        }}]
 
         def style_row(row_index: int, column_count_for_style: int, *, background=None) -> None:
             fmt: dict = {"textFormat": {"bold": True}}
@@ -296,6 +302,11 @@ class OverlapSheetWriter:
                 "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": "0.00%"}}},
                 "fields": "userEnteredFormat.numberFormat",
             }})
+
+        requests_payload.append({"autoResizeDimensions": {
+            "dimensions": {"sheetId": sheet_id, "dimension": "ROWS",
+                           "startIndex": 0, "endIndex": row_count},
+        }})
 
         if requests_payload:
             self._run_with_retry(lambda: worksheet.spreadsheet.batch_update({"requests": requests_payload}))
