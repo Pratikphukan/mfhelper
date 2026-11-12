@@ -38,10 +38,11 @@ The `Statement Date` and `Last Updated` have different meanings: the first is th
 
 To connect Groww holdings to daily NAV tracking and analytics, MFHelper resolves 6-digit AMFI codes using a safe two-tier lookup:
 
-1. **Tier 1 — Private Config Map (`MFHELPER_FUND_CODE_MAP`):**
-   - Checks the user's private mapping secret containing `{"code": ..., "name": ...}` pairs.
+1. **Tier 1 — Google Sheets Fund Code Map (`Fund Code Map` Tab):**
+   - Reads the private `Fund Code Map` tab in the user's Google Sheet, which contains `Scheme Name` and `AMFI Scheme Code` columns.
    - Normalizes spacing and punctuation for an exact name match.
    - If one code matches: assigns it with status `exact_config` and skips the network lookup.
+   - If the tab is missing or has malformed rows, the import is stopped safely without touching `Current Holdings`.
 
 2. **Tier 2 — Automated mfapi.in Search Fallback:**
    - If Tier 1 has no unique code, searches `https://api.mfapi.in/mf/search?q=<full_scheme_name>`.

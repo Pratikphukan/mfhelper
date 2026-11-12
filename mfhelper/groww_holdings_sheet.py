@@ -250,6 +250,9 @@ def _search_mfapi(scheme_name: str) -> tuple[tuple[str, str], ...]:
     return result_tuple
 
 
+MAX_MFAPI_FALLBACK_LOOKUPS = 50
+
+
 def make_sheet_values(
     snapshot: GrowwHoldingsSnapshot,
     code_map: dict[str, tuple[str, ...]],
@@ -269,13 +272,30 @@ def make_sheet_values(
         key = normalize_scheme_name(holding.scheme_name)
         if key not in names_by_key:
             names_by_key[key] = holding.scheme_name
-    unique_names = list(names_by_key.items())
-    if unique_names:
-        with ThreadPoolExecutor(max_workers=min(4, len(unique_names))) as executor:
-            resolved = list(executor.map(lambda pair: match_scheme_code(pair[1], code_map), unique_names))
-        resolved_by_key = dict(zip((key for key, _ in unique_names), resolved))
-    else:
-        resolved_by_key = {}
+
+    resolved_by_key: dict[str, tuple[str, str]] = {}
+    unmapped_pairs: list[tuple[str, str]] = []
+
+    for key, name in names_by_key.items():
+        matches = code_map.get(key, ())
+        if len(matches) == 1:
+            resolved_by_key[key] = (matches[0], "exact_config")
+        else:
+            unmapped_pairs.append((key, name))
+
+    if unmapped_pairs:
+        # Bound the MFAPI network requests to avoid exceeding Vercel function timeout limits
+        lookups_to_run = unmapped_pairs[:MAX_MFAPI_FALLBACK_LOOKUPS]
+        deferred_pairs = unmapped_pairs[MAX_MFAPI_FALLBACK_LOOKUPS:]
+
+        for key, _ in deferred_pairs:
+            resolved_by_key[key] = ("", "unmatched")
+
+        with ThreadPoolExecutor(max_workers=min(4, len(lookups_to_run))) as executor:
+            resolved_mfapi = list(executor.map(lambda pair: match_scheme_code(pair[1], code_map), lookups_to_run))
+        for (key, _), result in zip(lookups_to_run, resolved_mfapi):
+            resolved_by_key[key] = result
+
     for holding in snapshot.holdings:
         code, status = resolved_by_key[normalize_scheme_name(holding.scheme_name)]
         if not code:
@@ -408,8 +428,11 @@ def _atomic_replace(worksheet: object, spreadsheet: object, values: list[list[ob
     old_column_count = int(getattr(worksheet, "col_count", len(HEADERS)))
     row_count = max(old_row_count, len(values))
     column_count = max(old_column_count, len(HEADERS))
-    rows = [{"values": [_cell_data(value) for value in row]} for row in values]
-    rows.extend({"values": [{} for _ in HEADERS]} for _ in range(row_count - len(values)))
+    rows = [
+        {"values": [_cell_data(value) for value in row] + [{} for _ in range(column_count - len(row))]}
+        for row in values
+    ]
+    rows.extend({"values": [{} for _ in range(column_count)]} for _ in range(row_count - len(values)))
     requests = [
         {
             "updateSheetProperties": {
@@ -427,7 +450,7 @@ def _atomic_replace(worksheet: object, spreadsheet: object, values: list[list[ob
                     "startRowIndex": 0,
                     "startColumnIndex": 0,
                     "endRowIndex": row_count,
-                    "endColumnIndex": len(HEADERS),
+                    "endColumnIndex": column_count,
                 },
                 "rows": rows,
                 "fields": "userEnteredValue",

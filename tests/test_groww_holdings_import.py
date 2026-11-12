@@ -87,6 +87,24 @@ def test_rejects_incomplete_holding_row():
         parse_groww_xlsx(_workbook_bytes(bad_row=True))
 
 
+def test_rejects_nonblank_row_missing_scheme_name():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Holdings"
+    sheet.append(["HOLDINGS AS ON 2026-11-10"])
+    sheet.append([
+        "Scheme Name", "Category", "Sub-category", "Folio No.", "Units",
+        "Invested Value", "Current Value", "Returns", "XIRR",
+    ])
+    # Row with empty scheme name but populated values
+    sheet.append(["", "Equity", "Flexi Cap", "12345", 10, 1000, 1200, 200, "5%"])
+    output = BytesIO()
+    workbook.save(output)
+
+    with pytest.raises(GrowwImportError, match="missing its scheme name"):
+        parse_groww_xlsx(output.getvalue())
+
+
 @pytest.mark.parametrize("payload", [b"", b"not xlsx", b"%PDF-1.7"])
 def test_rejects_non_xlsx_input(payload):
     with pytest.raises(GrowwImportError, match="not a valid XLSX"):

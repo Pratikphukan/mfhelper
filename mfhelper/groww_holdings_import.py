@@ -193,7 +193,10 @@ def _parse_table(worksheet: object, header_row: int, columns: dict[str, int]) ->
         name = _text(_cell(row, columns["scheme_name"]))
         if not name:
             if any(_text(value) for value in row):
-                continue
+                raise GrowwImportError(
+                    f"A holdings row near spreadsheet row {row_number} is missing its scheme name. "
+                    "No sheet data was changed."
+                )
             continue
         if re.search(r"\b(total|grand total|portfolio summary|holdings summary)\b", name, re.IGNORECASE):
             continue
