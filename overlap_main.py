@@ -236,9 +236,20 @@ def main(argv: list[str] | None = None) -> int:
         log.error("Could not load required portfolio sheet data: %s", exc)
         return 2
 
+    candidates = [
+        code for code, pos in snapshot.positions_by_code.items() if pos.current_value > 0
+    ]
     holdings_by_code, fund_labels, issues = _fetch_constituents(
         snapshot.positions_by_code, log=log
     )
+    if candidates and not holdings_by_code:
+        log.error(
+            "Could not fetch constituent holdings for any of the %d portfolio fund(s). "
+            "Aborting without writing to Google Sheets to preserve the existing report.",
+            len(candidates),
+        )
+        return 3
+
     active_codes, matrix, sorted_pairs = _pairwise_report(holdings_by_code)
     exposures = calculate_stock_exposures(
         snapshot.positions_by_code,

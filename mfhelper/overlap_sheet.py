@@ -268,7 +268,7 @@ class OverlapSheetWriter:
             requests_payload.append({"repeatCell": {
                 "range": {"sheetId": sheet_id, "startRowIndex": exposure_header_row,
                           "endRowIndex": exposure_header_row + len(portfolio_exposures),
-                          "startColumnIndex": 2, "endColumnIndex": 4},
+                          "startColumnIndex": 2, "endColumnIndex": 3},
                 "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": "#,##0.00"}}},
                 "fields": "userEnteredFormat.numberFormat",
             }})

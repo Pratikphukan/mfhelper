@@ -8,6 +8,7 @@ from mfhelper.overlap import HoldingItem
 from mfhelper.portfolio_overlap import (
     FundPosition,
     PortfolioOverlapInputError,
+    PortfolioSnapshot,
     calculate_stock_exposures,
     parse_current_holdings,
     read_portfolio_sheet,
@@ -205,3 +206,33 @@ def test_overlap_writer_places_portfolio_exposure_before_pairwise_matrix(monkeyp
     wrap_request = next(request["repeatCell"] for request in requests if "repeatCell" in request)
     assert wrap_request["cell"]["userEnteredFormat"]["wrapStrategy"] == "WRAP"
     assert any("autoResizeDimensions" in request for request in requests)
+
+
+def test_overlap_main_aborts_without_writing_when_all_constituents_fail(monkeypatch):
+    from types import SimpleNamespace
+    import overlap_main
+
+    snapshot = PortfolioSnapshot(
+        statement_date=date(2026, 11, 10),
+        total_current_value=Decimal("1000"),
+        positions_by_code={"123456": FundPosition("123456", "Fund A", Decimal("1000"))},
+        unmapped_positions=(),
+    )
+    fake_settings = SimpleNamespace(google_sheet=SimpleNamespace(spreadsheet_id="fake-sheet-id"))
+    monkeypatch.setattr(overlap_main, "load_settings", lambda _p: fake_settings)
+    monkeypatch.setattr(overlap_main, "read_portfolio_sheet", lambda **_kw: (snapshot, {}))
+    # Simulate network outage: 0 funds successfully fetched
+    monkeypatch.setattr(overlap_main, "_fetch_constituents", lambda _pos, **_kw: ({}, {}, []))
+
+    sheet_writer_called = False
+
+    class FakeWriter:
+        def __init__(self, *args, **kwargs):
+            nonlocal sheet_writer_called
+            sheet_writer_called = True
+
+    monkeypatch.setattr(overlap_main, "OverlapSheetWriter", FakeWriter)
+
+    exit_code = overlap_main.main(["--dev"])
+    assert exit_code == 3
+    assert not sheet_writer_called
