@@ -18,21 +18,40 @@ AS_OF = date(2026, 11, 6)
 def context(**overrides) -> MarketContext:
     base = dict(
         available=True, regime=Regime.NEUTRAL, valuation=Valuation(20.64, "fair", source="nse", as_of=AS_OF),
-        as_of=AS_OF, index_close=23456.949, sma_short=22497.751, sma_long=22763.424, vix_avg=15.894,
+        as_of=AS_OF, index_close=23456.949, sma_short=22497.751, sma_long=22763.424,
+        sma_long_20_sessions_ago=22800.0, sma_long_change_20_sessions=-36.576, vix_avg=15.894,
     )
     base.update(overrides)
     return MarketContext(**base)
 
 
 class FakeSpreadsheetApi:
-    def __init__(self):
+    def __init__(self, worksheet=None):
         self.batches: list[dict] = []
         self.fail = False
+        self.worksheet = worksheet
 
     def batch_update(self, body):
         if self.fail:
             raise RuntimeError("formatting boom")
         self.batches.append(body)
+        if self.worksheet is None:
+            return
+        for request in body.get("requests", []):
+            if "insertDimension" in request:
+                dimension = request["insertDimension"]["range"]
+                start = dimension["startIndex"]
+                count = dimension["endIndex"] - start
+                for row in self.worksheet.rows:
+                    row[start:start] = [""] * count
+            if "updateCells" in request:
+                update = request["updateCells"]
+                row_index = update["range"].get("startRowIndex", 0)
+                start = update["range"].get("startColumnIndex", 0)
+                while len(self.worksheet.rows) <= row_index:
+                    self.worksheet.rows.append([])
+                values = [cell["userEnteredValue"]["stringValue"] for cell in update["rows"][0]["values"]]
+                self.worksheet.rows[row_index][start:start + len(values)] = values
 
 
 class FakeWorksheet:
@@ -41,7 +60,7 @@ class FakeWorksheet:
     def __init__(self, rows=None, row_count=1000):
         self.rows: list[list] = [list(r) for r in (rows or [])]
         self.row_count = row_count
-        self.spreadsheet = FakeSpreadsheetApi()
+        self.spreadsheet = FakeSpreadsheetApi(self)
         self._properties = {"sheetId": 77}
         self.updates: list[tuple[str, list, str]] = []
         self.resizes: list[int] = []
@@ -120,17 +139,17 @@ def test_row_matches_the_headers_and_rounds_numbers():
     row = build_row("2026-11-06 10:30:02", context())
     assert len(row) == len(HEADERS)
     assert row == [
-        "2026-11-06 10:30:02", "NEUTRAL", 23456.95, 22497.75, 22763.42, 15.89, 20.6, "fair", "nse",
-        "2026-11-06", "",
+        "2026-11-06 10:30:02", "NEUTRAL", 23456.95, 22497.75, 22763.42, 22800.0, -36.58, 15.89,
+        20.6, "fair", "nse", "2026-11-06", "",
     ]
 
 
 def test_unavailable_context_gives_blank_numbers_not_zeros():
     ctx = MarketContext(False, Regime.NEUTRAL, Valuation(None, "unknown"), notes=("no ^CRSLDX data", "x"))
     row = build_row("2026-11-06 10:30:02", ctx)
-    assert row[1] == "NEUTRAL" and row[2:7] == [""] * 5
-    assert row[7] == "unknown" and row[8] == "" and row[9] == ""
-    assert row[10] == "no ^CRSLDX data; x"
+    assert row[1] == "NEUTRAL" and row[2:8] == [""] * 6
+    assert row[9] == "unknown" and row[10] == "" and row[11] == ""
+    assert row[12] == "no ^CRSLDX data; x"
 
 
 @pytest.mark.parametrize(
@@ -143,9 +162,9 @@ def test_unavailable_context_gives_blank_numbers_not_zeros():
 )
 def test_pe_source_text(valuation, expected):
     row = build_row("2026-11-06 10:30:02", context(valuation=valuation))
-    assert row[8] == expected
+    assert row[10] == expected
     if expected != "nse":
-        assert row[6:8] == ["", "unknown"]
+        assert row[8:10] == ["", "unknown"]
 
 
 # --- writing --------------------------------------------------------------------------
@@ -193,6 +212,24 @@ def test_existing_tab_with_our_header_is_reused_without_reformatting(writer_for)
     writer, spreadsheet = writer_for({"Market Regime": ws})
     assert writer.record("2026-11-06 10:30:02", context()) == 2
     assert spreadsheet.added == [] and ws.spreadsheet.batches == []
+
+
+def test_known_old_header_is_migrated_and_existing_rows_are_preserved(writer_for):
+    old_row = ["2026-11-05 10:30:02", "BEAR", 22000, 22500, 22800, 17.0, 20.0, "fair", "nse",
+               "2026-11-05", "previous note"]
+    ws = FakeWorksheet(rows=[list(rs.LEGACY_HEADERS), old_row])
+    writer, _ = writer_for({"Market Regime": ws})
+
+    writer.record("2026-11-06 10:30:02", context())
+
+    assert ws.rows[0] == list(HEADERS)
+    assert ws.rows[1][:5] == old_row[:5]
+    assert ws.rows[1][5:7] == ["", ""]
+    assert ws.rows[1][7:] == old_row[5:]
+    assert ws.rows[2][5:7] == [22800.0, -36.58]
+    migration_requests = ws.spreadsheet.batches[0]["requests"]
+    assert "insertDimension" in migration_requests[0]
+    assert "updateCells" in migration_requests[1]
 
 
 def test_a_foreign_header_is_never_overwritten(writer_for):

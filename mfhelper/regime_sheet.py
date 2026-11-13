@@ -38,6 +38,22 @@ HEADERS = (
     "NIFTY 500",
     "Short SMA",
     "Long SMA",
+    "Long SMA (20 Sessions Ago)",
+    "200D SMA Change (20 Sessions)",
+    "VIX (smoothed)",
+    "Nifty 50 P/E",
+    "P/E state",
+    "P/E source",
+    "Market data as of",
+    "Notes",
+)
+
+LEGACY_HEADERS = (
+    "Run Timestamp (IST)",
+    "Regime",
+    "NIFTY 500",
+    "Short SMA",
+    "Long SMA",
     "VIX (smoothed)",
     "Nifty 50 P/E",
     "P/E state",
@@ -47,8 +63,8 @@ HEADERS = (
 )
 
 # 0-based column indexes used for number formats.
-PRICE_COLUMNS = (2, 3, 4, 5)  # index close, two SMAs, VIX: 2 decimals
-PE_COLUMN = 6                 # 1 decimal
+PRICE_COLUMNS = (2, 3, 4, 5, 6, 7)  # index, SMAs, SMA change, VIX: 2 decimals
+PE_COLUMN = 8                         # 1 decimal
 
 
 def stale_row_ranges(timestamps: list[str], run_date: date, keep_days: int) -> list[tuple[int, int]]:
@@ -98,6 +114,8 @@ def build_row(run_timestamp: str, context: MarketContext) -> list[object]:
         _round_or_blank(context.index_close, 2),
         _round_or_blank(context.sma_short, 2),
         _round_or_blank(context.sma_long, 2),
+        _round_or_blank(context.sma_long_20_sessions_ago, 2),
+        _round_or_blank(context.sma_long_change_20_sessions, 2),
         _round_or_blank(context.vix_avg, 2),
         _round_or_blank(valuation.pe if live_pe else None, 1),
         valuation.state if live_pe else "unknown",
@@ -180,11 +198,43 @@ class RegimeSheetWriter:
             self._format(ws)
             return
         if tuple(existing) != HEADERS:
+            if tuple(existing) == LEGACY_HEADERS:
+                self._migrate_legacy_header(ws)
+                return
             raise RegimeSheetError(
                 f"Worksheet {self._worksheet_name!r} already has a different header "
                 f"({existing[:4]}...). Refusing to write. Rename or delete that tab, or set "
                 "regime.sheet_name to another name."
             )
+
+    def _migrate_legacy_header(self, ws: gspread.Worksheet) -> None:
+        """Insert the two SMA slope columns while preserving existing Market Regime rows."""
+        sheet_id = ws._properties["sheetId"]
+        requests = [
+            {
+                "insertDimension": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "dimension": "COLUMNS",
+                        "startIndex": 5,
+                        "endIndex": 7,
+                    },
+                    "inheritFromBefore": True,
+                }
+            },
+            {
+                "updateCells": {
+                    "range": {"sheetId": sheet_id, "startRowIndex": 0, "startColumnIndex": 0},
+                    "rows": [{"values": [
+                        {"userEnteredValue": {"stringValue": header}} for header in HEADERS
+                    ]}],
+                    "fields": "userEnteredValue",
+                }
+            },
+        ]
+        self._run_with_retry(lambda: ws.spreadsheet.batch_update({"requests": requests}))
+        self._format(ws)
+        log.info("Migrated the existing Market Regime header; historical SMA slope cells remain blank")
 
     def _format(self, ws: gspread.Worksheet) -> None:
         sheet_id = ws._properties["sheetId"]

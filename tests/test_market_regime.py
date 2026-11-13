@@ -142,6 +142,8 @@ def test_reading_exposes_the_numbers_behind_the_regime():
     assert reading.as_of == TODAY and reading.vix_avg == pytest.approx(12.0)
     assert reading.index_close == index[-1].close
     assert reading.sma_short > reading.sma_long
+    assert reading.sma_long - reading.sma_long_20_sessions_ago == pytest.approx(4.0)
+    assert reading.sma_long_change_20_sessions == pytest.approx(4.0)
 
 
 def test_read_regime_needs_enough_history():
@@ -175,6 +177,7 @@ def test_context_for_an_uptrend(tmp_path):
     ctx = build(index, vix_series(index, [], base=12.0), tmp_path)
     assert ctx.available and ctx.regime is Regime.UPTREND
     assert ctx.as_of == TODAY and ctx.vix_avg == pytest.approx(12.0)
+    assert ctx.sma_long_change_20_sessions == pytest.approx(4.0)
     assert ctx.valuation.state == "fair"
 
 
