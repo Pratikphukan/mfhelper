@@ -76,6 +76,8 @@ class MarketContext:
     index_close: float | None = None
     sma_short: float | None = None
     sma_long: float | None = None
+    sma_long_20_sessions_ago: float | None = None
+    sma_long_change_20_sessions: float | None = None
     vix_avg: float | None = None
     notes: tuple[str, ...] = ()
 
@@ -91,13 +93,18 @@ def _sma(values: list[float], window: int, end_index: int) -> float:
     return sum(chunk) / window
 
 
+def _long_sma_pair(closes: list[float], index: int, cfg: RegimeSettings) -> tuple[float, float]:
+    current = _sma(closes, cfg.long_sma_days, index)
+    earlier = _sma(closes, cfg.long_sma_days, index - cfg.slope_lookback_days)
+    return current, earlier
+
+
 def classify_regime(closes: list[float], index: int, vix_avg: float | None, cfg: RegimeSettings) -> Regime | None:
     """Regime for ``closes[index]``; ``None`` if there is too little history."""
     if index < cfg.long_sma_days - 1 + cfg.slope_lookback_days:
         return None
     close = closes[index]
-    sma_long = _sma(closes, cfg.long_sma_days, index)
-    sma_long_before = _sma(closes, cfg.long_sma_days, index - cfg.slope_lookback_days)
+    sma_long, sma_long_before = _long_sma_pair(closes, index, cfg)
     if close < sma_long and sma_long < sma_long_before:
         return Regime.BEAR
     if vix_avg is not None:
@@ -125,6 +132,8 @@ class RegimeReading:
     index_close: float
     sma_short: float
     sma_long: float
+    sma_long_20_sessions_ago: float
+    sma_long_change_20_sessions: float
     vix_avg: float | None
 
 
@@ -138,12 +147,15 @@ def read_regime(
     regime = classify_regime(closes, position, vix_avg, cfg)
     if regime is None:
         return None
+    sma_long, sma_long_20_sessions_ago = _long_sma_pair(closes, position, cfg)
     return RegimeReading(
         regime=regime,
         as_of=index[position].date,
         index_close=closes[position],
         sma_short=_sma(closes, cfg.short_sma_days, position),
-        sma_long=_sma(closes, cfg.long_sma_days, position),
+        sma_long=sma_long,
+        sma_long_20_sessions_ago=sma_long_20_sessions_ago,
+        sma_long_change_20_sessions=sma_long - sma_long_20_sessions_ago,
         vix_avg=vix_avg,
     )
 
@@ -305,6 +317,8 @@ def build_market_context(
         index_close=result.index_close,
         sma_short=result.sma_short,
         sma_long=result.sma_long,
+        sma_long_20_sessions_ago=result.sma_long_20_sessions_ago,
+        sma_long_change_20_sessions=result.sma_long_change_20_sessions,
         vix_avg=result.vix_avg,
         notes=tuple(notes),
     )
