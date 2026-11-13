@@ -1,16 +1,7 @@
-"""Mutual Fund Portfolio Overlap report generator (one-shot CLI).
+"""Build an on-demand, portfolio-weighted fund overlap report.
 
-Calculates the percentage of overlapping stocks between every pair of
-configured mutual funds to identify hidden diversification/concentration risk.
-
-Run on demand:
-
-    .venv/bin/python overlap_main.py
-
-Exit codes:
-  0  Success
-  2  Configuration error
-  3  Unhandled exception.
+Run with ``.venv/bin/python overlap_main.py``. Add ``--dev`` to use the
+development holdings and report tabs instead of the production tabs.
 """
 
 from __future__ import annotations
@@ -19,8 +10,10 @@ import argparse
 import logging
 from pathlib import Path
 import sys
+from zoneinfo import ZoneInfo
+from datetime import datetime
 
-from mfhelper.config import load_funds, load_settings
+from mfhelper.config import load_settings
 from mfhelper.overlap import (
     calculate_overlap_percentage,
     fetch_fund_holdings,
@@ -32,16 +25,23 @@ from mfhelper.overlap import (
     save_cached_mappings,
 )
 from mfhelper.overlap_sheet import OverlapSheetWriter, OVERLAP_TAB_DEFAULT
+from mfhelper.portfolio_overlap import (
+    FundDataIssue,
+    PortfolioOverlapInputError,
+    StockExposure,
+    calculate_stock_exposures,
+    read_portfolio_sheet,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
 DATA_DIR = PROJECT_ROOT / "data"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
-FUNDS_PATH_DEFAULT = CONFIG_DIR / "funds.yaml"
 SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
 CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
 TOKEN_PATH = DATA_DIR / "token.json"
+STALE_AFTER_DAYS = 30
 
 
 def _configure_logging() -> None:
@@ -61,211 +61,249 @@ def _configure_logging() -> None:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog="mfhelper-overlap",
-        description="Compute pairwise stock holdings overlap between mutual funds.",
+        description="Build a portfolio-weighted overlap report from Google Sheets.",
     )
-    p.add_argument(
-        "--funds",
-        type=str,
-        default=str(FUNDS_PATH_DEFAULT),
-        help="Path or name of the funds YAML file to check (default: config/funds.yaml).",
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Read Current Holdings (Dev) and write Portfolio Overlap (Dev).",
     )
-    return p.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def _fetch_constituents(
+    positions: dict,
+    *,
+    log: logging.Logger,
+) -> tuple[dict[str, list], dict[str, str], list[FundDataIssue]]:
+    """Fetch constituent lists where possible, retaining failures for the report."""
+    candidates = {
+        code: position
+        for code, position in positions.items()
+        if position.current_value > 0
+    }
+    holdings_by_code: dict[str, list] = {}
+    labels = {code: position.name for code, position in candidates.items()}
+    issues: list[FundDataIssue] = []
+    if not candidates:
+        return holdings_by_code, labels, issues
+
+    codes = list(candidates)
+    code_to_isin: dict[str, str] = {}
+    code_to_name: dict[str, str] = {}
+    try:
+        code_to_isin, code_to_name = fetch_isin_from_amfi(codes)
+    except Exception as exc:
+        log.warning("Could not fetch AMFI scheme details: %s", exc)
+        issues.extend(
+            FundDataIssue(code, position.name, position.current_value, "AMFI lookup failed")
+            for code, position in candidates.items()
+        )
+        return holdings_by_code, labels, issues
+
+    cache_path = get_tickertape_mappings_path()
+    cached_mappings = load_cached_mappings(cache_path)
+    mapped_ids: dict[str, str] = {}
+    needs_sitemap: list[tuple[str, str, str]] = []
+
+    for code, position in candidates.items():
+        isin = code_to_isin.get(code)
+        if not isin:
+            issues.append(FundDataIssue(code, position.name, position.current_value, "AMFI code not found"))
+            continue
+        cached_id = cached_mappings.get(isin)
+        if cached_id:
+            mapped_ids[code] = cached_id
+        else:
+            needs_sitemap.append((code, isin, code_to_name.get(code, position.name)))
+
+    sitemap_urls = None
+    if needs_sitemap:
+        try:
+            sitemap_urls = fetch_tickertape_sitemap_urls()
+        except Exception as exc:
+            log.warning("Could not fetch Tickertape's fund list: %s", exc)
+            issues.extend(
+                FundDataIssue(code, candidates[code].name, candidates[code].current_value,
+                              "Tickertape fund lookup failed")
+                for code, _, _ in needs_sitemap
+            )
+
+    if sitemap_urls is not None:
+        for code, isin, name in needs_sitemap:
+            try:
+                mf_id = resolve_mfid_by_isin(isin, name, sitemap_urls)
+            except Exception as exc:
+                log.warning("Could not resolve %s in Tickertape: %s", name, exc)
+                mf_id = None
+            if mf_id:
+                mapped_ids[code] = mf_id
+                cached_mappings[isin] = mf_id
+            else:
+                position = candidates[code]
+                issues.append(FundDataIssue(code, position.name, position.current_value,
+                                            "No verified Tickertape match"))
+
+    save_cached_mappings(cache_path, cached_mappings)
+
+    for code, mf_id in mapped_ids.items():
+        position = candidates[code]
+        try:
+            holdings = fetch_fund_holdings(mf_id)
+            if not holdings:
+                issues.append(FundDataIssue(code, position.name, position.current_value,
+                                            "Tickertape returned no constituent holdings"))
+                continue
+            holdings_by_code[code] = holdings
+        except Exception as exc:
+            log.warning("Could not fetch constituents for %s (%s): %s", position.name, code, exc)
+            issues.append(FundDataIssue(code, position.name, position.current_value,
+                                        "Tickertape constituent fetch failed"))
+
+    return holdings_by_code, labels, issues
+
+
+def _pairwise_report(holdings_by_code: dict[str, list]):
+    codes = sorted(holdings_by_code)
+    matrix: dict[str, dict[str, float]] = {}
+    detailed: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+    for code_a in codes:
+        matrix[code_a] = {}
+        for code_b in codes:
+            if code_a == code_b:
+                matrix[code_a][code_b] = 100.0
+                continue
+            overlap, details = calculate_overlap_percentage(
+                holdings_by_code[code_a], holdings_by_code[code_b]
+            )
+            matrix[code_a][code_b] = overlap
+            pair = tuple(sorted((code_a, code_b)))
+            detailed.setdefault(pair, (overlap, details))
+    sorted_pairs = sorted(detailed.items(), key=lambda item: (-item[1][0], item[0]))
+    return codes, matrix, sorted_pairs
+
+
+def _print_summary(snapshot, exposures: list[StockExposure], issues: list[FundDataIssue], age_days: int) -> None:
+    print(f"Groww statement: {snapshot.statement_date.isoformat()} ({age_days} days old)")
+    print(f"Reported portfolio value: ₹{snapshot.total_current_value:,.2f}")
+    if age_days > STALE_AFTER_DAYS:
+        print(f"WARNING: statement is stale (older than {STALE_AFTER_DAYS} days).")
+    print("\nLargest estimated underlying equity exposures:")
+    if not exposures:
+        print("  No constituent exposure could be calculated.")
+    for item in exposures[:15]:
+        label = f" ({item.ticker})" if item.ticker else ""
+        print(
+            f"  {item.company_name}{label}: ₹{item.estimated_value:,.2f} "
+            f"({item.portfolio_pct:.2f}% of reported portfolio; {item.fund_count} funds)"
+        )
+    if snapshot.unmapped_positions or issues:
+        print("\nCoverage warnings:")
+        for position in snapshot.unmapped_positions:
+            print(f"  {position.name}: ₹{position.current_value:,.2f} — {position.reason}")
+        for issue in issues:
+            print(f"  {issue.name} ({issue.code}): ₹{issue.current_value:,.2f} — {issue.reason}")
 
 
 def main(argv: list[str] | None = None) -> int:
     _configure_logging()
     log = logging.getLogger("mfhelper.overlap_main")
-    log.info("=== MFHelper Portfolio Overlap calculation starting ===")
-    
+    log.info("=== MFHelper portfolio-weighted overlap calculation starting ===")
     args = _parse_args(argv)
-    funds_path = Path(args.funds)
-    if not funds_path.exists():
-        log.error("Funds file not found at: %s", funds_path)
-        return 2
 
-    # 1. Load funds
-    try:
-        funds = load_funds(funds_path)
-    except Exception as e:
-        log.error("Failed to load funds file: %s", e)
-        return 2
-
-    if not funds:
-        log.error("No funds configured in: %s", funds_path)
-        return 2
-
-    # 2. Get ISINs from AMFI
-    codes = [str(f.code) for f in funds]
-    try:
-        code_to_isin, code_to_name = fetch_isin_from_amfi(codes)
-    except Exception as e:
-        log.exception("Failed to fetch ISIN codes from AMFI:")
-        return 3
-
-    # 3. Load cache and resolve Tickertape mfId
-    mappings_path = get_tickertape_mappings_path()
-    cached_mappings = load_cached_mappings(mappings_path)
-    
-    mapped_ids = {}
-    sitemap_urls = None  # Lazy loaded if needed
-    
-    for fund in funds:
-        isin = code_to_isin.get(str(fund.code))
-        if not isin:
-            log.warning("AMFI code %s not found in AMFI master list -- skipping.", fund.code)
-            continue
-            
-        mf_id = cached_mappings.get(isin)
-        if mf_id:
-            mapped_ids[fund.code] = mf_id
-        else:
-            if sitemap_urls is None:
-                try:
-                    sitemap_urls = fetch_tickertape_sitemap_urls()
-                except Exception as e:
-                    log.exception("Failed to download Tickertape sitemap:")
-                    return 3
-                    
-            resolved_id = resolve_mfid_by_isin(isin, fund.name or code_to_name[str(fund.code)], sitemap_urls)
-            if resolved_id:
-                mapped_ids[fund.code] = resolved_id
-                cached_mappings[isin] = resolved_id
-
-    save_cached_mappings(mappings_path, cached_mappings)
-
-    # 4. Fetch live holdings for each fund
-    fund_holdings = {}
-    fund_labels = {}
-    
-    for fund in funds:
-        mf_id = mapped_ids.get(fund.code)
-        if not mf_id:
-            continue
-        try:
-            holdings = fetch_fund_holdings(mf_id)
-            fund_holdings[fund.code] = holdings
-            fund_labels[fund.code] = fund.name or code_to_name[str(fund.code)]
-        except Exception as e:
-            log.warning("Failed to fetch holdings for %s (Tickertape ID: %s): %s", fund.code, mf_id, e)
-
-    active_codes = list(fund_holdings.keys())
-    if len(active_codes) < 2:
-        log.error("Need at least 2 resolved funds with holdings to calculate overlap. Found %d.", len(active_codes))
-        return 2
-
-    # 5. Compute pairwise overlap matrix
-    matrix = {}
-    detailed_overlaps = {}
-    
-    for i, code_a in enumerate(active_codes):
-        matrix[code_a] = {}
-        for code_b in active_codes:
-            if code_a == code_b:
-                matrix[code_a][code_b] = 100.0
-                continue
-                
-            overlap, details = calculate_overlap_percentage(fund_holdings[code_a], fund_holdings[code_b])
-            matrix[code_a][code_b] = overlap
-            
-            # Save detail for A -> B (or B -> A, keeping order sorted)
-            pair_key = tuple(sorted([code_a, code_b]))
-            if pair_key not in detailed_overlaps:
-                detailed_overlaps[pair_key] = (overlap, details)
-
-    # 6. Print Overlap Matrix Table
-    print("\n" + "=" * 100)
-    print("MUTUAL FUND PORTFOLIO OVERLAP MATRIX (%)")
-    print("=" * 100)
-    
-    # Header row
-    col_width = 18
-    sys.stdout.write(f"{'Fund / Code':<20}")
-    for code in active_codes:
-        short_col_name = fund_labels[code][:15]
-        sys.stdout.write(f"| {short_col_name:^{col_width}}")
-    sys.stdout.write("\n" + "-" * (20 + (col_width + 2) * len(active_codes)) + "\n")
-    
-    # Rows
-    for code_a in active_codes:
-        label_truncated = fund_labels[code_a][:18]
-        sys.stdout.write(f"{label_truncated:<20}")
-        for code_b in active_codes:
-            overlap_val = matrix[code_a][code_b]
-            if code_a == code_b:
-                color_val = "100.0"
-            else:
-                color_val = f"{overlap_val:.2f}%"
-            sys.stdout.write(f"| {color_val:^{col_width}}")
-        sys.stdout.write("\n")
-    print("=" * 100)
-
-    # 7. Print Detailed Analysis for High Overlaps (>10%)
-    print("\n" + "=" * 100)
-    print("DETAILED PAIRWISE STOCK OVERLAP ANALYSIS (>10.0% overlap)")
-    print("=" * 100)
-    
-    sorted_pairs = sorted(detailed_overlaps.items(), key=lambda x: -x[1][0])
-    high_overlap_found = False
-    
-    for pair, (overlap, details) in sorted_pairs:
-        if overlap < 10.0:
-            continue
-            
-        high_overlap_found = True
-        code_a, code_b = pair
-        name_a = fund_labels[code_a]
-        name_b = fund_labels[code_b]
-        
-        print(f"\n🔥 Overlap between '{name_a}' and '{name_b}': {overlap:.2f}%")
-        print("-" * 100)
-        print(f"{'Stock / Holding Name':<45} | {'Alloc A %':<15} | {'Alloc B %':<15} | {'Overlap Contribution %':<20}")
-        print("-" * 100)
-        
-        target_overlap_sum = 0.90 * overlap
-        cumulative_overlap = 0.0
-        top_details = []
-        remaining_details = []
-        
-        for d in details:
-            if cumulative_overlap < target_overlap_sum:
-                top_details.append(d)
-                cumulative_overlap += d["intersection"]
-            else:
-                remaining_details.append(d)
-                
-        for d in top_details:
-            print(f"{d['company_name']:<45} | {d['alloc_a']:<15.2f} | {d['alloc_b']:<15.2f} | {d['intersection']:<20.2f}")
-        if remaining_details:
-            remaining_names = ", ".join(r["company_name"] for r in remaining_details)
-            print(f"  (Other overlapping stocks: {remaining_names})")
-        print("-" * 100)
-
-    if not high_overlap_found:
-        print("\nNice! All your mutual funds have extremely low portfolio overlaps (< 10%). Your diversification is excellent!")
-        print("=" * 100)
-
-    # 8. Write results to Google Sheet
     try:
         settings = load_settings(SETTINGS_PATH)
-        sheet_id = settings.google_sheet.spreadsheet_id
-        if sheet_id:
-            log.info("Writing overlap report to Google Sheet spreadsheet ID %s...", sheet_id)
-            writer = OverlapSheetWriter(
-                spreadsheet_id=sheet_id,
-                worksheet_name=OVERLAP_TAB_DEFAULT,
-                credentials_path=CREDENTIALS_PATH,
-                token_path=TOKEN_PATH,
-            )
-            writer.write_overlap_report(active_codes, fund_labels, matrix, sorted_pairs)
-            print(f"\n✅ Portfolio Overlap report successfully written to Google Sheet tab '{OVERLAP_TAB_DEFAULT}'!")
-        else:
-            log.warning("No Google Sheet Spreadsheet ID configured. Skipping Sheet write.")
-    except Exception as e:
-        log.exception("Failed to write Portfolio Overlap report to Google Sheet:")
+    except Exception as exc:
+        log.error("Could not load Google Sheets settings: %s", exc)
+        return 2
+    spreadsheet_id = settings.google_sheet.spreadsheet_id
+    if not spreadsheet_id:
+        log.error("No Google Sheet Spreadsheet ID configured.")
+        return 2
 
-    log.info("Portfolio overlap calculation completed successfully.")
+    holdings_tab = "Current Holdings (Dev)" if args.dev else "Current Holdings"
+    report_tab = f"{OVERLAP_TAB_DEFAULT} (Dev)" if args.dev else OVERLAP_TAB_DEFAULT
+    try:
+        snapshot, _fund_code_map = read_portfolio_sheet(
+            spreadsheet_id=spreadsheet_id,
+            credentials_path=CREDENTIALS_PATH,
+            token_path=TOKEN_PATH,
+            holdings_tab=holdings_tab,
+        )
+    except Exception as exc:
+        log.error("Could not load required portfolio sheet data: %s", exc)
+        return 2
+
+    candidates = [
+        code for code, pos in snapshot.positions_by_code.items() if pos.current_value > 0
+    ]
+    holdings_by_code, fund_labels, issues = _fetch_constituents(
+        snapshot.positions_by_code, log=log
+    )
+    if candidates and not holdings_by_code:
+        log.error(
+            "Could not fetch constituent holdings for any of the %d portfolio fund(s). "
+            "Aborting without writing to Google Sheets to preserve the existing report.",
+            len(candidates),
+        )
+        return 3
+
+    active_codes, matrix, sorted_pairs = _pairwise_report(holdings_by_code)
+    exposures = calculate_stock_exposures(
+        snapshot.positions_by_code,
+        holdings_by_code,
+        snapshot.total_current_value,
+    )
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    age_days = max(0, (today - snapshot.statement_date).days)
+    _print_summary(snapshot, exposures, issues, age_days)
+
+    if active_codes:
+        print("\nPairwise fund overlap matrix:")
+        print("Fund / AMFI code | " + " | ".join(f"{fund_labels[code]} [{code}]" for code in active_codes))
+        for code_a in active_codes:
+            values = " | ".join(
+                "100.00%" if code_a == code_b else f"{matrix[code_a][code_b]:.2f}%"
+                for code_b in active_codes
+            )
+            print(f"{fund_labels[code_a]} [{code_a}] | {values}")
+
+        high_overlap_pairs = [item for item in sorted_pairs if item[1][0] >= 10.0]
+        if high_overlap_pairs:
+            print("\nDetailed pairwise overlap (pairs at or above 10%):")
+            for (code_a, code_b), (overlap, details) in high_overlap_pairs:
+                print(f"  {fund_labels[code_a]} vs {fund_labels[code_b]}: {overlap:.2f}%")
+                for detail in details[:8]:
+                    print(f"    {detail['company_name']}: {detail['intersection']:.2f}% overlap contribution")
+
+    try:
+        writer = OverlapSheetWriter(
+            spreadsheet_id=spreadsheet_id,
+            worksheet_name=report_tab,
+            credentials_path=CREDENTIALS_PATH,
+            token_path=TOKEN_PATH,
+        )
+        writer.write_overlap_report(
+            active_codes,
+            fund_labels,
+            matrix,
+            sorted_pairs,
+            portfolio_snapshot=snapshot,
+            portfolio_exposures=exposures,
+            fund_data_issues=issues,
+            statement_age_days=age_days,
+            stale_after_days=STALE_AFTER_DAYS,
+        )
+    except Exception as exc:
+        log.exception("Failed to write the overlap report:")
+        print(f"Could not write the report: {exc}", file=sys.stderr)
+        return 3
+
+    log.info("Updated report tab %r with %d mapped fund(s), %d constituent dataset(s).",
+             report_tab, len(snapshot.positions_by_code), len(active_codes))
+    print(f"\nUpdated Google Sheet tab '{report_tab}'.")
     return 0
 
 
