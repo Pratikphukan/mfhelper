@@ -48,6 +48,7 @@ from mfhelper.market_regime import banner_text, build_market_context
 from mfhelper.regime_filter import annotate_buys, check_trimming_for_context
 from mfhelper.regime_sheet import RegimeSheetWriter
 from mfhelper.current_holdings import read_current_holdings
+from mfhelper.groww_links import read_groww_url_map
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -85,6 +86,25 @@ def run(args: argparse.Namespace) -> int:
     funds = load_funds(FUNDS_PATH)
     settings = load_settings(SETTINGS_PATH)
     alert_settings = load_alert_settings(ALERTS_PATH)
+
+    groww_urls: dict[str, str] = {}
+    if alert_settings.email.enable:
+        try:
+            groww_urls = read_groww_url_map(
+                spreadsheet_id=settings.google_sheet.spreadsheet_id,
+                credentials_path=CREDENTIALS_PATH,
+                token_path=TOKEN_PATH,
+            )
+            log.info("Loaded %d Groww fund URL(s) from Fund Code Map", len(groww_urls))
+        except Exception as exc:
+            # Link lookup is optional; keep the email buttons and use Groww's general page.
+            log.warning("Could not load Groww fund URLs; buttons will open Groww Mutual Funds: %s", exc)
+        missing_groww_urls = [fund.code for fund in funds if fund.code not in groww_urls]
+        if missing_groww_urls:
+            log.warning(
+                "No Groww page URL for %d configured fund(s); their buttons will open Groww Mutual Funds: %s",
+                len(missing_groww_urls), ", ".join(missing_groww_urls),
+            )
 
     worksheet_name = settings.google_sheet.worksheet
     if args.dev:
@@ -278,6 +298,7 @@ def run(args: argparse.Namespace) -> int:
                 current_dist_52w=dist_52w_pct,
                 current_dist_200d_sma=dist_200d_sma_pct,
                 rules=alert_settings.rules,
+                groww_link=groww_urls.get(fund.code),
             )
 
             # Add market-regime advice (notes and suggested size) to the buy side.
@@ -309,6 +330,7 @@ def run(args: argparse.Namespace) -> int:
                     rsi=rsi_value,
                     dist_52w=dist_52w_pct,
                     rules=alert_settings.rules,
+                    groww_link=groww_urls.get(fund.code),
                 )
             else:
                 trim_signal = check_trimming_signal(
@@ -317,6 +339,7 @@ def run(args: argparse.Namespace) -> int:
                     current_rsi=rsi_value,
                     current_dist_52w=dist_52w_pct,
                     rules=alert_settings.rules,
+                    groww_link=groww_urls.get(fund.code),
                 )
             if trim_signal:
                 all_trimming_signals.append(trim_signal)
