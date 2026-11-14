@@ -630,7 +630,7 @@ def format_screen_markdown(data: dict[str, Any]) -> str:
             lines.append(f"##### {tier_badge}: **{d['fund_name']}** (`{d['scheme_code']}`)")
             lines.append(f"- **Triggers:** {', '.join(d['reasons'])}")
             lines.append(f"- **Recommendation:** {d['suggestion']}")
-            lines.append(f"- [Direct Buy on Groww]({d['groww_link']})")
+            lines.append(f"- [Find fund on Groww]({d['groww_link']})")
             lines.append("")
 
     if trims:

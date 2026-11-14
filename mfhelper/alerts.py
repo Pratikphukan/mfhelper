@@ -13,6 +13,7 @@ from email.mime.multipart import MIMEMultipart
 from typing import TYPE_CHECKING
 
 from mfhelper.config import AlertEmailConfig, AlertRulesConfig
+from mfhelper.groww_links import GROWW_MUTUAL_FUNDS_URL
 from mfhelper.metrics import distance_from_200d_sma
 
 if TYPE_CHECKING:  # market_regime pulls in yfinance, so only import it when it is actually used
@@ -41,7 +42,7 @@ class DipBuyingSignal:
     tier: int               # 1, 2, or 3
     reasons: list[str]      # e.g., ["RSI is 32.5 (Oversold)", "52W Drop is -22.4% (Deep)"]
     suggestion: str
-    groww_link: str         # Direct buy button link
+    groww_link: str         # Groww fund page, or the mutual-funds landing page as fallback
     # Set only by the market-regime layer: suggested size as a multiple of the normal top-up.
     multiplier: float | None = None
     context_note: str = ""  # Why the multiplier was chosen (regime / valuation), shown in the email
@@ -55,11 +56,10 @@ def check_confluence_signal(
     current_dist_52w: float | None,
     current_dist_200d_sma: float | None,
     rules: AlertRulesConfig,
+    groww_link: str | None = None,
 ) -> DipBuyingSignal | None:
     """Check today's indicators for a single fund to see if they form a confluent buying signal."""
-    import urllib.parse
-    groww_query = urllib.parse.quote_plus(fund_name)
-    groww_link = f"https://groww.in/mutual-funds/search?q={groww_query}"
+    groww_link = groww_link or GROWW_MUTUAL_FUNDS_URL
 
     # Tier 3 (Deep/Strong Buy)
     t3_reasons = []
@@ -128,7 +128,7 @@ class TrimmingSignal:
     tier: int               # 1, 2, or 3
     reasons: list[str]      # e.g., ["RSI is 76.5 (Overbought)", "52W Drop is -0.5% (Peak)"]
     suggestion: str
-    groww_link: str         # Direct search page link
+    groww_link: str         # Groww fund page, or the mutual-funds landing page as fallback
     context_note: str = ""  # Set only by the market-regime layer (e.g. thresholds tightened)
     portfolio_note: str = ""
 
@@ -140,6 +140,7 @@ def check_trimming_signal(
     current_dist_52w: float | None,
     rules: AlertRulesConfig,
     *,
+    groww_link: str | None = None,
     rsi_offset: float = 0.0,
     dist_52w_offset: float = 0.0,
 ) -> TrimmingSignal | None:
@@ -148,9 +149,7 @@ def check_trimming_signal(
     ``rsi_offset`` lowers every RSI threshold and ``dist_52w_offset`` widens every 52-week
     window (in percentage points), so trims fire earlier. Both default to 0 (the fixed rules).
     """
-    import urllib.parse
-    groww_query = urllib.parse.quote_plus(fund_name)
-    groww_link = f"https://groww.in/mutual-funds/search?q={groww_query}"
+    groww_link = groww_link or GROWW_MUTUAL_FUNDS_URL
 
     # Trim Tier 3 (Extreme Climax Peak - Urgent Action)
     t3_reasons = []
