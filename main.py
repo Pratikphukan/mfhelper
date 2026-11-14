@@ -96,15 +96,19 @@ def run(args: argparse.Namespace) -> int:
                 token_path=TOKEN_PATH,
             )
             log.info("Loaded %d Groww fund URL(s) from Fund Code Map", len(groww_urls))
+            alertable_funds = [
+                f for f in funds
+                if f.active and (f.category or "").strip().lower() not in ("debt", "liquid", "arbitrage", "overnight", "skip")
+            ]
+            missing_groww_urls = [f.code for f in alertable_funds if f.code not in groww_urls]
+            if missing_groww_urls:
+                log.info(
+                    "No Groww page URL for %d alertable fund(s); buttons will open Groww Mutual Funds: %s",
+                    len(missing_groww_urls), ", ".join(missing_groww_urls),
+                )
         except Exception as exc:
             # Link lookup is optional; keep the email buttons and use Groww's general page.
             log.warning("Could not load Groww fund URLs; buttons will open Groww Mutual Funds: %s", exc)
-        missing_groww_urls = [fund.code for fund in funds if fund.code not in groww_urls]
-        if missing_groww_urls:
-            log.warning(
-                "No Groww page URL for %d configured fund(s); their buttons will open Groww Mutual Funds: %s",
-                len(missing_groww_urls), ", ".join(missing_groww_urls),
-            )
 
     worksheet_name = settings.google_sheet.worksheet
     if args.dev:

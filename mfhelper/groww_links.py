@@ -7,11 +7,10 @@ import re
 from urllib.parse import urlsplit
 
 from mfhelper.groww_holdings_sheet import FUND_CODE_MAP_TAB_NAME, _validated_sheet_code
-from mfhelper.sheets import _load_credentials
 
 GROWW_MUTUAL_FUNDS_URL = "https://groww.in/mutual-funds"
 GROWW_URL_HEADERS = ("Scheme Name", "AMFI Scheme Code", "Groww URL")
-_GROWW_PATH_RE = re.compile(r"^/(?:mutual-funds|etfs)/[A-Za-z0-9._-]+$")
+_GROWW_PATH_RE = re.compile(r"^/(?:mutual-funds|etfs)/[A-Za-z0-9._-]+/?$", re.IGNORECASE)
 
 
 class GrowwUrlMapError(ValueError):
@@ -41,7 +40,8 @@ def validate_groww_url(value: object) -> str:
         or parsed.fragment
     ):
         raise ValueError("URL must be an HTTPS Groww mutual-fund or ETF page")
-    return url
+    clean_path = parsed.path.rstrip("/")
+    return f"https://groww.in{clean_path}"
 
 
 def parse_groww_url_map_rows(rows) -> dict[str, str]:
@@ -90,6 +90,7 @@ def read_groww_url_map(
     try:
         if client_factory is None:
             import gspread
+            from mfhelper.sheets import _load_credentials
 
             credentials = _load_credentials(credentials_path, token_path)
             client = gspread.authorize(credentials)

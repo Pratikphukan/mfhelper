@@ -15,13 +15,19 @@ def test_map_rows_return_valid_urls_keyed_by_amfi_code():
     rows = [
         ["Scheme Name", "AMFI Scheme Code", "Groww URL"],
         ["Fund A Direct Growth", 119788.0, "https://groww.in/mutual-funds/fund-a-direct-growth"],
-        ["Gold ETF", "113076", "https://groww.in/etfs/gold-etf"],
+        ["Gold ETF", "113076", "https://groww.in/etfs/gold-etf/"],  # trailing slash supported
+        ["Fund A duplicate", 119788.0, "https://www.groww.in/mutual-funds/fund-a-direct-growth/"],  # canonicalized
     ]
 
     assert parse_groww_url_map_rows(rows) == {
         "119788": "https://groww.in/mutual-funds/fund-a-direct-growth",
         "113076": "https://groww.in/etfs/gold-etf",
     }
+
+
+def test_validate_groww_url_canonicalizes():
+    assert validate_groww_url("https://www.groww.in/mutual-funds/sample-fund/") == "https://groww.in/mutual-funds/sample-fund"
+    assert validate_groww_url("https://groww.in/etfs/sample-etf") == "https://groww.in/etfs/sample-etf"
 
 
 def test_missing_individual_url_is_left_for_general_page_fallback():
