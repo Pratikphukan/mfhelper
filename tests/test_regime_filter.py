@@ -51,10 +51,6 @@ ALL_ALERTS = [T1, T2, T3, CROSS_UP, CROSS_DOWN, TRIM]
 # --- the safety property: advice never removes anything ---------------------------------
 
 
-def strip_notes(alerts):
-    return [replace(a, context_note="") for a in alerts]
-
-
 @pytest.mark.parametrize("regime", list(Regime))
 @pytest.mark.parametrize("valuation", [FAIR, CHEAP, STRETCHED, Valuation(None, "unknown")])
 def test_every_alert_and_signal_survives_in_every_regime(regime, valuation):
@@ -62,16 +58,20 @@ def test_every_alert_and_signal_survives_in_every_regime(regime, valuation):
         alerts, confluence = annotate(
             regime, ALL_ALERTS, signal(tier) if tier else None, rsi=rsi, dist_200d=dist, valuation=valuation
         )
-        assert strip_notes(alerts) == ALL_ALERTS  # same alerts, same order, nothing added or removed
+        assert [(a.scheme_code, a.indicator_name, a.current_value, a.alert_type) for a in alerts] == [
+            (a.scheme_code, a.indicator_name, a.current_value, a.alert_type) for a in ALL_ALERTS
+        ]  # same technical alerts, in the same order
         assert (confluence.tier if confluence else None) == tier
 
 
-def test_only_the_note_and_size_fields_ever_change():
+def test_annotation_only_changes_advice_fields_and_never_suggests_size():
     for regime in Regime:
         alerts, confluence = annotate(regime, ALL_ALERTS, signal(2), rsi=22.0, dist_200d=-15.0)
         for before, after in zip(ALL_ALERTS, alerts):
-            assert replace(after, context_note="") == before
-        assert replace(confluence, multiplier=None, context_note="") == signal(2)
+            assert (after.scheme_code, after.indicator_name, after.current_value, after.alert_type) == (
+                before.scheme_code, before.indicator_name, before.current_value, before.alert_type
+            )
+        assert confluence.multiplier is None
 
 
 def test_alerts_that_are_not_buys_never_get_a_note():
@@ -87,10 +87,12 @@ def test_no_confluence_stays_no_confluence():
 # --- notes by regime --------------------------------------------------------------------
 
 
-def test_neutral_adds_no_regime_note():
+def test_neutral_labels_signal_as_technical_and_suggests_no_amount():
     alerts, confluence = annotate(Regime.NEUTRAL, [T1, T3], signal(2))
-    assert [a.context_note for a in alerts] == ["", ""]
-    assert confluence.context_note == ""
+    assert [a.display_label for a in alerts] == ["TECHNICAL DIP TIER 1", "TECHNICAL DIP TIER 3"]
+    assert confluence.display_label == "TECHNICAL DIP TIER 2"
+    assert "no amount" in confluence.suggestion
+    assert confluence.multiplier is None
 
 
 def test_unavailable_context_behaves_like_neutral():
@@ -98,43 +100,60 @@ def test_unavailable_context_behaves_like_neutral():
     alerts, confluence = rf.annotate_buys(
         context, CFG, rsi=20.0, dist_200d_sma=-30.0, alerts=[T1, T3], confluence=signal(3)
     )
-    assert [a.context_note for a in alerts] == ["", ""] and confluence.context_note == ""
+    assert [a.display_label for a in alerts] == ["TECHNICAL DIP TIER 1", "TECHNICAL DIP TIER 3"]
+    assert "unavailable" in confluence.context_note
+    assert confluence.multiplier is None
 
 
-def test_uptrend_note_is_added_to_every_buy():
+def test_uptrend_shows_technical_signal_without_size():
     alerts, confluence = annotate(Regime.UPTREND, [T1, T2, T3, TRIM], signal(1))
-    notes = [a.context_note for a in alerts]
-    assert all("uptrend" in n for n in notes[:3]) and notes[3] == ""
-    assert "uptrend" in confluence.context_note
+    assert [a.display_label for a in alerts[:3]] == [
+        "TECHNICAL DIP TIER 1", "TECHNICAL DIP TIER 2", "TECHNICAL DIP TIER 3",
+    ]
+    assert alerts[3] == TRIM
+    assert "UPTREND" in confluence.context_note
+    assert confluence.multiplier is None
 
 
-def test_correction_flags_tier_1_only():
+def test_correction_labels_tier_1_watch_and_tier_2_3_review():
     alerts, confluence = annotate(Regime.CORRECTION, [T1, T2, T3], signal(1), vix_avg=19.44)
-    assert "Tier-1 dips are weaker" in alerts[0].context_note and "VIX avg 19.4" in alerts[0].context_note
-    assert alerts[1].context_note == "" and alerts[2].context_note == ""
-    assert "wait for Tier 2 or 3" in confluence.context_note
-    assert annotate(Regime.CORRECTION, [], signal(2))[1].context_note == ""
+    assert alerts[0].display_label == "WATCH · TECHNICAL DIP TIER 1"
+    assert alerts[1].display_label == "REVIEW SIGNAL · TECHNICAL DIP TIER 2"
+    assert alerts[2].display_label == "REVIEW SIGNAL · TECHNICAL DIP TIER 3"
+    assert "VIX is 19.4" in alerts[0].context_note
+    assert "Tier 2 or 3" in alerts[0].action_suggestion
+    assert confluence.display_label == "WATCH · TECHNICAL DIP TIER 1"
+    assert confluence.multiplier is None
+
+    _, stronger = annotate(Regime.CORRECTION, [], signal(3))
+    assert stronger.display_label == "REVIEW SIGNAL · TECHNICAL DIP TIER 3"
 
 
 def test_correction_note_works_without_vix_number():
     alerts, _ = annotate(Regime.CORRECTION, [T1], None, vix_avg=None)
-    assert "volatile." in alerts[0].context_note
+    assert "volatility is elevated" in alerts[0].context_note
 
 
-def test_bear_warns_on_every_non_capitulation_buy():
+def test_bear_marks_non_capitulation_as_watch_without_predicting_the_fund():
     alerts, confluence = annotate(Regime.BEAR, [T1, T2, T3], signal(3), rsi=31.2, dist_200d=-8.4)
     for a in alerts:
-        assert "may keep falling" in a.context_note
-        assert "RSI <= 25" in a.context_note and "<= -12%" in a.context_note
-    assert "may keep falling" in confluence.context_note
+        assert a.display_label.startswith("DIP DETECTED — WATCH")
+        assert "does not predict the fund's next move" in a.action_suggestion
+        assert "thresholds not met" in a.context_note
+    assert confluence.display_label.startswith("DIP DETECTED — WATCH")
+    assert "does not predict" in confluence.suggestion
+    assert confluence.multiplier is None
 
 
 def test_bear_tags_capitulation_with_the_real_numbers():
     alerts, confluence = annotate(Regime.BEAR, [T1, T3, CROSS_UP], signal(3), rsi=22.0, dist_200d=-13.5)
-    assert alerts[0].context_note.startswith("CAPITULATION: RSI 22.0 and 200D SMA discount -13.5%")
-    assert alerts[1].context_note.startswith("CAPITULATION")
+    assert alerts[0].display_label.startswith("CAPITULATION DETECTED — REVIEW BEFORE DECIDING")
+    assert "not proof the fund has bottomed" in alerts[0].action_suggestion
+    assert "RSI 22.0 <= 25" in alerts[0].context_note and "-13.5% <= -12%" in alerts[0].context_note
+    assert alerts[1].display_label.startswith("CAPITULATION DETECTED — REVIEW BEFORE DECIDING")
     assert alerts[2].context_note == ""  # not a BUY TIER alert
-    assert confluence.context_note.startswith("CAPITULATION")
+    assert confluence.display_label.startswith("CAPITULATION DETECTED — REVIEW BEFORE DECIDING")
+    assert confluence.multiplier is None
 
 
 @pytest.mark.parametrize(
@@ -153,67 +172,29 @@ def test_capitulation_requires_both_conditions(rsi, dist, expected):
     assert rf.meets_capitulation(rsi, dist, CFG) is expected
 
 
-def test_bear_missing_indicators_give_the_warning_not_a_crash():
+def test_bear_missing_indicators_give_watch_label_and_explain_missing_data():
     alerts, _ = annotate(Regime.BEAR, [T3], None, rsi=None, dist_200d=None)
-    assert "may keep falling" in alerts[0].context_note
+    assert alerts[0].display_label.startswith("DIP DETECTED — WATCH")
+    assert "RSI is unavailable" in alerts[0].context_note
+    assert "200D SMA distance is unavailable" in alerts[0].context_note
 
 
 def test_bear_capitulation_thresholds_are_configurable():
     cfg = replace(CFG, capitulation_rsi=30.0, capitulation_sma_discount_pct=-8.0)
     alerts, _ = annotate(Regime.BEAR, [T3], None, rsi=29.0, dist_200d=-9.0, cfg=cfg)
-    assert alerts[0].context_note.startswith("CAPITULATION")
+    assert alerts[0].display_label.startswith("CAPITULATION DETECTED — REVIEW BEFORE DECIDING")
     warn, _ = annotate(Regime.BEAR, [T3], None, rsi=31.0, dist_200d=-9.0, cfg=cfg)
-    assert "RSI <= 30" in warn[0].context_note and "<= -8%" in warn[0].context_note
+    assert "RSI 31.0 is above 30" in warn[0].context_note
+    assert "200D SMA distance" not in warn[0].context_note  # This threshold is met.
 
 
-# --- sizes -------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("tier,expected", [(1, 1.0), (2, 1.5), (3, 2.0)])
-def test_tier_sizes(tier, expected):
-    assert annotate(Regime.NEUTRAL, [], signal(tier))[1].multiplier == expected
-
-
-def test_uptrend_upgrades_only_tier_1():
-    assert annotate(Regime.UPTREND, [], signal(1))[1].multiplier == 1.5
-    assert annotate(Regime.UPTREND, [], signal(2))[1].multiplier == 1.5  # plain Tier-2 value
-    assert annotate(Regime.UPTREND, [], signal(3))[1].multiplier == 2.0
-    assert "UPTREND sizing" in annotate(Regime.UPTREND, [], signal(1))[1].context_note
-
-
-def test_correction_and_bear_show_the_normal_size_next_to_the_warning():
-    assert annotate(Regime.CORRECTION, [], signal(1))[1].multiplier == 1.0
-    assert annotate(Regime.BEAR, [], signal(2), rsi=40.0)[1].multiplier == 1.5
-
-
-def test_cheap_valuation_scales_up_and_stretched_scales_down():
-    cheap = annotate(Regime.NEUTRAL, [], signal(2), valuation=CHEAP)[1]
-    assert cheap.multiplier == pytest.approx(1.5 * 1.25) and "P/E 17.0 < 18" in cheap.context_note
-    stretched = annotate(Regime.NEUTRAL, [], signal(2), valuation=STRETCHED)[1]
-    assert stretched.multiplier == pytest.approx(1.5 * 0.5) and "P/E 25.0 > 24" in stretched.context_note
-
-
-def test_regime_note_and_sizing_are_combined_in_one_note():
-    note = annotate(Regime.UPTREND, [], signal(1), valuation=CHEAP)[1].context_note
-    assert note.startswith("Market is in an uptrend") and "Sizing: UPTREND sizing for Tier-1" in note and "P/E 17.0" in note
-
-
-def test_uptrend_and_cheap_stack():
-    assert annotate(Regime.UPTREND, [], signal(1), valuation=CHEAP)[1].multiplier == pytest.approx(1.5 * 1.25)
-
-
-@pytest.mark.parametrize(
-    "valuation",
-    [Valuation(None, "unknown"), Valuation(17.0, "cheap", source="manual")],
-)
-def test_unavailable_or_non_live_valuation_changes_nothing(valuation):
-    out = annotate(Regime.NEUTRAL, [], signal(2), valuation=valuation)[1]
-    assert out.multiplier == 1.5 and out.context_note == ""
-
-
-def test_custom_multipliers_are_honoured():
+@pytest.mark.parametrize("regime", list(Regime))
+def test_configured_multipliers_are_not_attached_in_any_regime(regime):
     cfg = replace(CFG, multiplier_tier2=2.5, multiplier_cheap_factor=2.0)
-    assert annotate(Regime.NEUTRAL, [], signal(2), valuation=CHEAP, cfg=cfg)[1].multiplier == 5.0
+    out = annotate(regime, [], signal(2), valuation=CHEAP, cfg=cfg)[1]
+    assert out.multiplier is None
+    assert "normal top-up" not in out.suggestion
+    assert "Sizing:" not in out.context_note
 
 
 def test_buy_tier_parsing():
