@@ -98,6 +98,10 @@ def harness(monkeypatch):
         return AlertSettings(rules=RULES, email=EMAIL, regime=regime)
 
     state = {"alert_settings": settings_for(RegimeSettings()), "context": None}
+    groww_urls = {
+        code: f"https://groww.in/mutual-funds/fund-{code}"
+        for code in FUNDS
+    }
 
     funds = dict(FUNDS)
     monkeypatch.setattr(
@@ -109,6 +113,7 @@ def harness(monkeypatch):
         lambda _p: Settings(GoogleSheetConfig("sheet-id", "Sheet1"), 30, "Asia/Kolkata"),
     )
     monkeypatch.setattr(main_module, "load_alert_settings", lambda _p: state["alert_settings"])
+    monkeypatch.setattr(main_module, "read_groww_url_map", lambda **_kwargs: dict(groww_urls))
     monkeypatch.setattr(main_module, "fetch_and_parse", lambda: {})
     monkeypatch.setattr(main_module, "SheetColumnStore", FakeColumnStore)
     monkeypatch.setattr(main_module, "LastNavStore", FakeNavStore)
@@ -142,7 +147,8 @@ def harness(monkeypatch):
     def run():
         return main_module.run(SimpleNamespace(dev=True))
 
-    return SimpleNamespace(calls=calls, state=state, run=run, settings_for=settings_for, funds=funds)
+    return SimpleNamespace(calls=calls, state=state, run=run, settings_for=settings_for, funds=funds,
+                           groww_urls=groww_urls)
 
 
 def ctx(regime: Regime, valuation: Valuation = Valuation(22.0, "fair", source="nse")) -> MarketContext:
@@ -167,6 +173,32 @@ def test_disabled_feature_never_builds_context_and_passes_no_regime_arguments(ha
     assert {s.scheme_code for s in call["confluence"]} == {"111", "222"}
     assert [s.scheme_code for s in call["trimming_signals"]] == ["444"]
     assert not any(a.scheme_code == "333" for a in call["alerts"])
+    assert {s.scheme_code: s.groww_link for s in call["confluence"]} == {
+        "111": harness.groww_urls["111"], "222": harness.groww_urls["222"],
+    }
+    assert {s.scheme_code: s.groww_link for s in call["trimming_signals"]} == {
+        "444": harness.groww_urls["444"],
+    }
+
+
+def test_unavailable_groww_map_keeps_buttons_using_the_general_mutual_funds_page(harness, monkeypatch):
+    monkeypatch.setattr(main_module, "read_groww_url_map", lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("sheet unavailable")))
+
+    assert harness.run() == 0
+    (call,) = harness.calls["dispatch"]
+    from mfhelper.groww_links import GROWW_MUTUAL_FUNDS_URL
+    assert all(signal.groww_link == GROWW_MUTUAL_FUNDS_URL for signal in call["confluence"])
+    assert all(signal.groww_link == GROWW_MUTUAL_FUNDS_URL for signal in call["trimming_signals"])
+
+
+def test_missing_individual_groww_url_uses_general_page_for_that_fund(harness):
+    harness.groww_urls.pop("111")
+    assert harness.run() == 0
+    (call,) = harness.calls["dispatch"]
+    from mfhelper.groww_links import GROWW_MUTUAL_FUNDS_URL
+    signals = {signal.scheme_code: signal for signal in call["confluence"]}
+    assert signals["111"].groww_link == GROWW_MUTUAL_FUNDS_URL
+    assert signals["222"].groww_link == harness.groww_urls["222"]
 
 
 def fingerprint(call):

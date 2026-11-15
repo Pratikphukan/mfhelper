@@ -64,17 +64,17 @@ def sample_inputs():
         DipBuyingSignal("100001", "Example Flexi Cap Direct Growth", 3,
                         ["RSI is 31.20 (Deeply Oversold)", "52W Drop is -22.00% (Deep Discount)"],
                         "Strong Confluence Buy. Fund is highly oversold and deeply discounted from peak. Suggesting aggressive lumpsum top-up.",
-                        "https://groww.in/mutual-funds/search?q=Example+Flexi+Cap"),
+                        "https://groww.in/mutual-funds/jm-flexi-cap-fund-direct-growth"),
         DipBuyingSignal("100002", "Example Mid Cap Direct Growth", 1,
                         ["RSI is 52.00 (Mild Pullback)", "52W Drop is -6.10% (Mild Discount)"],
                         "Mild Confluence Pullback. Healthy consolidation. Suggesting standard top-up.",
-                        "https://groww.in/mutual-funds/search?q=Example+Mid+Cap"),
+                        "https://groww.in/mutual-funds/motilal-oswal-most-focused-midcap-30-fund-direct-growth"),
     ]
     trimming = [
         TrimmingSignal("100003", "Example Large Cap Direct Growth", 2,
                        ["RSI is 72.00 (Standard Overbought)", "52W Drop is -1.50% (Near Peak)"],
                        "Moderate Overstretch. Strong uptrend momentum, but entering the trim zone.",
-                       "https://groww.in/mutual-funds/search?q=Example+Large+Cap"),
+                       "https://groww.in/mutual-funds/axis-multicap-fund-direct-growth"),
     ]
     return triggered, confluence, trimming
 

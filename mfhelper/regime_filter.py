@@ -137,19 +137,21 @@ def check_trimming_for_context(
     rsi: float | None,
     dist_52w: float | None,
     rules: AlertRulesConfig,
+    groww_link: str | None = None,
 ) -> TrimmingSignal | None:
     """Trim check that fires earlier while the Nifty 50 P/E is above ``pe_stretched``."""
     valuation = context.valuation
     if valuation.source != "nse" or valuation.pe is None or valuation.state != "stretched":
-        return check_trimming_signal(scheme_code, fund_name, rsi, dist_52w, rules)
+        return check_trimming_signal(scheme_code, fund_name, rsi, dist_52w, rules, groww_link=groww_link)
 
     tightened = check_trimming_signal(
         scheme_code, fund_name, rsi, dist_52w, rules,
+        groww_link=groww_link,
         rsi_offset=cfg.trim_rsi_offset, dist_52w_offset=cfg.trim_52w_offset_pts,
     )
     if tightened is None:
         return None
-    standard = check_trimming_signal(scheme_code, fund_name, rsi, dist_52w, rules)
+    standard = check_trimming_signal(scheme_code, fund_name, rsi, dist_52w, rules, groww_link=groww_link)
     if standard is not None and standard.tier == tightened.tier:
         return tightened  # would have fired anyway, nothing to explain
     note = (

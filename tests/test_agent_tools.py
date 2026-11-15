@@ -358,7 +358,7 @@ def test_screen_dip_and_trim_opportunities_with_signals(tmp_path):
         tier=3,
         reasons=["RSI is 28.5 (Oversold)", "52W Drop is -22.0% (Deep)"],
         suggestion="Strong Confluence Buy. Aggressive lumpsum top-up.",
-        groww_link="https://groww.in/mutual-funds/search?q=Fund+One",
+        groww_link="https://groww.in/mutual-funds/fund-one-direct-growth",
     )
 
     history = _make_dummy_history(250, 100.0)
@@ -377,7 +377,7 @@ def test_screen_dip_and_trim_opportunities_with_signals(tmp_path):
     md = format_screen_markdown(res)
     assert "Tier-3 Generational Dip" in md
     assert "Fund One" in md
-    assert "Direct Buy on Groww" in md
+    assert "Find fund on Groww" in md
 
 
 def test_screen_dip_and_trim_opportunities_all_failed(tmp_path):
