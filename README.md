@@ -14,7 +14,7 @@ Your morning alerts are driven by a **Decision-Making Confluence Engine**. Inste
 * **Tactical Trimming Briefings:** Warns you when funds enter an extreme overbought climax run, advising you to take partial profits and pause SIPs.
 * **Asset-Class Filtering & Conflict Resolution:** Suppresses meaningless "false alarm" technical alerts for stable debt/liquid/arbitrage funds. If indicators contradict (e.g., short-term overbought but long-term discount), it merges them into a smart, consolidated `HOLD` warning.
 
-* **Market Regime Awareness (optional, off by default):** With `regime.enable: true` in `config/alerts.yaml`, buy alerts get advice from the broad market (NIFTY 500 vs its 50/200D SMA plus a 5-day average India VIX) and a suggested size from the Nifty 50 P/E. It never hides an alert. See [Market regime and valuation context](#market-regime-and-valuation-context).
+* **Market Regime Awareness (optional, off by default):** With `regime.enable: true` in `config/alerts.yaml`, technical dip signals get cautious wording based on the broad market (NIFTY 500 vs its 50/200D SMA plus a 5-day average India VIX). It does not suggest an investment amount or hide a signal. See [Market regime and valuation context](#market-regime-and-valuation-context).
 
 ### 2. 🗺️ Portfolio Overlap Analyzer (`overlap_main.py`)
 Are your actual fund holdings concentrated in the same underlying stocks?
@@ -269,24 +269,24 @@ A fixed "RSI < 45" buy rule means something different in a raging bull market th
 | Switch in `config/alerts.yaml` | What it does |
 | --- | --- |
 | `regime.record_to_sheet: true` | Records one row per day in a separate **Market Regime** tab of your Google Sheet. It never changes an alert or an email, so it is safe to turn on first and just watch. |
-| `regime.enable: true` | Adds **advice** (notes and suggested sizes) to your buy alerts, described below. |
+| `regime.enable: true` | Adds market context and cautious review wording to technical dip alerts, described below. |
 
 You can turn on either one, both, or neither.
 
-**It only advises. It never removes, hides, or mutes an alert.** You get exactly the alerts you would get with the feature off, and you decide whether to follow the advice. When off, the alert email is byte-for-byte what it was before.
+**The regime changes the wording, not which technical signals are found.** Dip signals stay visible, but the email presents them as technical signals to review rather than direct buy instructions. It does not suggest an investment amount.
 
 | Regime (first match wins, using today's data) | Rule | Note added to buy alerts |
 | --- | --- | --- |
-| BEAR | NIFTY 500 below its 200D SMA, and that SMA is lower than 20 sessions ago | Every buy gets a warning that the dip may keep falling. A buy with RSI <= 25 *and* 200D SMA discount <= -12% (both required) is tagged **CAPITULATION** instead. |
-| CORRECTION | 5-day average India VIX >= 18 (no upper cap) | A Tier-1 buy is flagged as weaker here ("you may want to wait for Tier 2 or 3"). |
-| UPTREND | 5-day average VIX < 15 and index above its 50D SMA | "Dips like this have usually been good buys." |
-| NEUTRAL | anything else, or market data missing / older than 5 days | No note. |
+| BEAR | NIFTY 500 below its 200D SMA, and that SMA is lower than 20 sessions ago | A dip is marked **WATCH**, unless both configured capitulation thresholds are met. Meeting them is an extreme-dip signal, not proof of a bottom. |
+| CORRECTION | 5-day average India VIX >= 18 (no upper cap) | Tier 1 is **WATCH**. Tier 2 and 3 are **REVIEW SIGNAL**. |
+| UPTREND | 5-day average VIX < 15 and index above its 50D SMA | Signals are labeled **TECHNICAL DIP TIER** and shown without an amount. |
+| NEUTRAL | anything else, or market data missing / older than 5 days | Technical dip signals are shown for review without an amount. |
 
 * The regime follows each day's market. There is no waiting period.
-* The note appears on each BUY TIER row and on the buy briefing cards. Sell, trim, and cross alerts never get a regime note.
+* The wording appears on both indicator rows and dip-signal cards. Buy buttons say **REVIEW ON GROWW**. Sell, trim, and cross alerts keep their existing wording.
 * It applies to every fund that already receives technical alerts (debt, liquid, arbitrage, overnight, and `skip` funds stay excluded). That includes gold and international funds, which follow an Indian-equity regime they do not necessarily track.
-* **Valuation (Nifty 50 P/E):** below 18, suggested buy size is multiplied by 1.25; above 24, it is halved and trim alerts fire earlier (RSI -5 points, 52-week windows +2 points). The only way the set of alerts can change is that earlier trims add alerts. P/E is used only when a valid value is fetched live from NSE. If NSE cannot be reached, P/E is blank in the sheet and no P/E-based size or trim adjustment is applied.
-* **Suggested size** is text only: Tier-1 1.0x, Tier-2 1.5x, Tier-3 2.0x of your normal SIP / top-up (see `multipliers:` in the config), with Tier-1 at 1.5x in an UPTREND. In CORRECTION and BEAR the normal size is shown next to the warning. Nothing places an order.
+* **Valuation (Nifty 50 P/E):** above 24, trim alerts fire earlier (RSI -5 points, 52-week windows +2 points). P/E does not change buy-signal wording or amount. P/E is used only when a valid value is fetched live from NSE.
+* **Suggested size:** none. Multiplier settings remain accepted for compatibility but are currently unused. MFHelper will not suggest an amount until it has a real private investment limit.
 * The email gets a one-line regime banner at the top. As before, an email is only sent on days when at least one alert fires.
 
 ### The Market Regime tab

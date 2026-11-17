@@ -236,20 +236,22 @@ def test_bear_market_labels_buys_instead_of_hiding_them(harness):
     for a in call["alerts"]:
         by_fund.setdefault(a.scheme_code, []).append(a)
     assert by_fund["111"], "fund 111 buys are still sent in a bear market"
-    assert all("may keep falling" in a.context_note for a in by_fund["111"] if "BUY TIER" in a.alert_type)
-    assert all(a.context_note.startswith("CAPITULATION") for a in by_fund["222"] if "BUY TIER" in a.alert_type)
+    assert all(a.display_label.startswith("DIP DETECTED — WATCH") for a in by_fund["111"] if "BUY TIER" in a.alert_type)
+    assert all(a.display_label.startswith("CAPITULATION DETECTED — REVIEW BEFORE DECIDING") for a in by_fund["222"] if "BUY TIER" in a.alert_type)
     signals = {s.scheme_code: s for s in call["confluence"]}
-    assert "may keep falling" in signals["111"].context_note
-    assert signals["222"].context_note.startswith("CAPITULATION") and signals["222"].multiplier == 2.0
+    assert "does not predict the fund's next move" in signals["111"].suggestion
+    assert signals["222"].display_label.startswith("CAPITULATION DETECTED — REVIEW BEFORE DECIDING")
+    assert "not proof the fund has bottomed" in signals["222"].suggestion
+    assert signals["111"].multiplier is signals["222"].multiplier is None
     assert "444" not in signals and [s.scheme_code for s in call["trimming_signals"]] == ["444"]
 
 
-def test_uptrend_adds_notes_and_sizes(harness):
+def test_uptrend_shows_technical_signals_without_sizes(harness):
     harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True))
     harness.state["context"] = ctx(Regime.UPTREND)
     assert harness.run() == 0
     (call,) = harness.calls["dispatch"]
-    assert all(s.multiplier is not None and "uptrend" in s.context_note for s in call["confluence"])
+    assert all(s.multiplier is None and s.display_label.startswith("TECHNICAL DIP TIER") for s in call["confluence"])
 
 
 def test_stretched_valuation_tightens_trims_in_the_daily_run(harness):
@@ -268,13 +270,15 @@ def test_stretched_valuation_tightens_trims_in_the_daily_run(harness):
     assert [s.scheme_code for s in call["trimming_signals"]] == ["444"]
 
 
-def test_unavailable_market_data_adds_no_notes(harness):
+def test_unavailable_market_data_uses_technical_labels_without_sizes(harness):
     harness.state["alert_settings"] = harness.settings_for(RegimeSettings(enable=True))
     harness.state["context"] = MarketContext(False, Regime.NEUTRAL, Valuation(None, "unknown"), notes=("no data",))
     assert harness.run() == 0
     (call,) = harness.calls["dispatch"]
     assert call["market_context"].available is False
-    assert all(a.context_note == "" for a in call["alerts"])
+    assert all(a.display_label.startswith("TECHNICAL DIP TIER") for a in call["alerts"] if "BUY TIER" in a.alert_type)
+    assert all("unavailable" in a.context_note for a in call["alerts"] if "BUY TIER" in a.alert_type)
+    assert all(s.multiplier is None and "unavailable" in s.context_note for s in call["confluence"])
     assert {s.scheme_code for s in call["confluence"]} == {"111", "222"}
 
 

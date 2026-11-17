@@ -1,20 +1,4 @@
-"""Add market-regime advice to the per-fund alert results.
-
-The regime is advice only. Nothing here removes, hides, or reorders an alert: the
-alerts and signals that go in are the ones that come out, with an optional note and
-a suggested size attached. The only thing that can change *which* alerts exist is a
-stretched Nifty 50 P/E, which makes trim thresholds fire earlier (more alerts).
-
-Notes on BUY alerts, by regime:
-
-* UPTREND     "dips like this have usually been good buys"
-* CORRECTION  a Tier-1 buy is flagged as weaker; Tier 2 and 3 get no regime note
-* BEAR        a buy with RSI and 200D SMA discount both extreme is tagged CAPITULATION;
-              every other buy carries a falling-knife warning
-* NEUTRAL     no note (also used when market data is unavailable)
-
-Sizes are text in the email (a multiple of the user's normal top-up), never an order.
-"""
+"""Present technical dip signals with market-regime context, without sizing advice."""
 
 from __future__ import annotations
 
@@ -26,7 +10,6 @@ from mfhelper.alerts import (
     TriggeredAlert,
     TrimmingSignal,
     check_trimming_signal,
-    format_multiplier,
 )
 from mfhelper.config import AlertRulesConfig, RegimeSettings
 from mfhelper.market_regime import MarketContext, Regime
@@ -49,53 +32,78 @@ def meets_capitulation(rsi: float | None, dist_200d_sma: float | None, cfg: Regi
     )
 
 
-def regime_note(
+def regime_advice(
     tier: int,
     context: MarketContext,
     cfg: RegimeSettings,
     rsi: float | None,
     dist_200d_sma: float | None,
-) -> str:
-    """The advice sentence for a buy of ``tier``; empty when the regime has no view."""
+) -> tuple[str, str, str]:
+    """Return display label, cautious action text, and factual context for a dip signal."""
     regime = context.regime
-    if regime is Regime.UPTREND:
-        return "Market is in an uptrend (low VIX). Dips like this have usually been good buys."
-    if regime is Regime.CORRECTION and tier == 1:
-        vix = f" (VIX avg {context.vix_avg:.1f})" if context.vix_avg is not None else ""
-        return (
-            f"Market is volatile{vix}. Tier-1 dips are weaker in this kind of market. "
-            "You may want to wait for Tier 2 or 3."
-        )
     if regime is Regime.BEAR:
         if meets_capitulation(rsi, dist_200d_sma, cfg):
+            label = f"CAPITULATION DETECTED — REVIEW BEFORE DECIDING · TECHNICAL DIP TIER {tier}"
+            suggestion = (
+                "Both configured capitulation thresholds are met. This is an extreme-dip signal, "
+                "not proof the fund has bottomed. Review before deciding."
+            )
+            context_note = (
+                f"RSI {rsi:.1f} <= {cfg.capitulation_rsi:g} and 200D SMA distance "
+                f"{dist_200d_sma:.1f}% <= {cfg.capitulation_sma_discount_pct:g}%.")
+            return label, suggestion, context_note
+        label = f"DIP DETECTED — WATCH · TECHNICAL DIP TIER {tier}"
+        suggestion = (
+            "A technical dip signal appeared while the broad market meets MFHelper's BEAR rule. "
+            "This does not predict the fund's next move. Watch and review before deciding."
+        )
+        missing = []
+        if rsi is None:
+            missing.append("RSI is unavailable")
+        elif rsi > cfg.capitulation_rsi:
+            missing.append(f"RSI {rsi:.1f} is above {cfg.capitulation_rsi:g}")
+        if dist_200d_sma is None:
+            missing.append("200D SMA distance is unavailable")
+        elif dist_200d_sma > cfg.capitulation_sma_discount_pct:
+            missing.append(f"200D SMA distance {dist_200d_sma:.1f}% is above {cfg.capitulation_sma_discount_pct:g}%")
+        context_note = "Capitulation thresholds not met: " + "; ".join(missing) + "."
+        return label, suggestion, context_note
+
+    if regime is Regime.CORRECTION:
+        vix_detail = (
+            f"Five-session average VIX is {context.vix_avg:.1f}."
+            if context.vix_avg is not None
+            else "The market is classified as CORRECTION because volatility is elevated."
+        )
+        if tier == 1:
             return (
-                f"CAPITULATION: RSI {rsi:.1f} and 200D SMA discount {dist_200d_sma:.1f}% are both extreme."
+                "WATCH · TECHNICAL DIP TIER 1",
+                "Tier 1 is a weaker signal during elevated volatility. Watch; review again if Tier 2 or 3 appears.",
+                vix_detail,
             )
         return (
-            "Market is in a downtrend. This dip may keep falling. Only RSI <= "
-            f"{cfg.capitulation_rsi:g} with a 200D SMA discount <= {cfg.capitulation_sma_discount_pct:g}% "
-            "counts as capitulation."
+            f"REVIEW SIGNAL · TECHNICAL DIP TIER {tier}",
+            "A stronger technical dip signal appeared during elevated volatility. Review before deciding.",
+            vix_detail,
         )
-    return ""
 
-
-def size_multiplier(tier: int, context: MarketContext, cfg: RegimeSettings) -> tuple[float, str]:
-    """Suggested buy size (times the user's normal top-up) and the reasons behind it."""
-    base = {1: cfg.multiplier_tier1, 2: cfg.multiplier_tier2, 3: cfg.multiplier_tier3}[tier]
-    notes: list[str] = []
-    if tier == 1 and context.regime is Regime.UPTREND:
-        base = cfg.multiplier_uptrend_tier1
-        notes.append(f"UPTREND sizing for Tier-1 ({format_multiplier(base)})")
-
-    valuation = context.valuation
-    factor = 1.0
-    if valuation.source == "nse" and valuation.pe is not None and valuation.state == "cheap":
-        factor = cfg.multiplier_cheap_factor
-        notes.append(f"Nifty 50 P/E {valuation.pe:.1f} < {cfg.pe_cheap:g}: x{factor:g}")
-    elif valuation.source == "nse" and valuation.pe is not None and valuation.state == "stretched":
-        factor = cfg.multiplier_stretched_factor
-        notes.append(f"Nifty 50 P/E {valuation.pe:.1f} > {cfg.pe_stretched:g}: x{factor:g}")
-    return base * factor, "; ".join(notes)
+    if regime is Regime.UPTREND:
+        return (
+            f"TECHNICAL DIP TIER {tier}",
+            "Technical dip conditions are present. Review the indicators; no amount is suggested.",
+            "The broad-market regime is UPTREND; this is not a prediction for the individual fund.",
+        )
+    if not context.available:
+        return (
+            f"TECHNICAL DIP TIER {tier}",
+            "Technical dip conditions are present. Review the indicators; no amount is suggested.",
+            "Market-regime data is unavailable, so this signal has no broad-market context.",
+        )
+    return (
+        f"TECHNICAL DIP TIER {tier}",
+        "Technical dip conditions are present. Review the indicators; no amount is suggested.",
+        "MFHelper has no UPTREND, CORRECTION, or BEAR view for the broad market today.",
+    )
 
 
 def annotate_buys(
@@ -107,25 +115,32 @@ def annotate_buys(
     alerts: list[TriggeredAlert],
     confluence: DipBuyingSignal | None,
 ) -> tuple[list[TriggeredAlert], DipBuyingSignal | None]:
-    """Attach advice to one fund's buy alerts and confluence signal.
-
-    Returns the same alerts and signal, in the same order, with notes (and a size on the
-    confluence signal) added. Alerts that are not BUY TIER alerts are returned untouched.
-    """
+    """Attach non-directive regime wording to one fund's buy alerts and confluence signal."""
     annotated: list[TriggeredAlert] = []
     for alert in alerts:
         tier = buy_tier(alert)
-        note = regime_note(tier, context, cfg, rsi, dist_200d_sma) if tier is not None else ""
-        annotated.append(replace(alert, context_note=note) if note else alert)
+        if tier is None:
+            annotated.append(alert)
+            continue
+        label, suggestion, note = regime_advice(tier, context, cfg, rsi, dist_200d_sma)
+        annotated.append(replace(
+            alert,
+            action_suggestion=suggestion,
+            context_note=note,
+            display_label=label,
+        ))
 
     if confluence is None:
         return annotated, None
 
-    multiplier, size_notes = size_multiplier(confluence.tier, context, cfg)
-    parts = [regime_note(confluence.tier, context, cfg, rsi, dist_200d_sma)]
-    if size_notes:
-        parts.append(f"Sizing: {size_notes}.")
-    return annotated, replace(confluence, multiplier=multiplier, context_note=" ".join(p for p in parts if p))
+    label, suggestion, note = regime_advice(confluence.tier, context, cfg, rsi, dist_200d_sma)
+    return annotated, replace(
+        confluence,
+        multiplier=None,
+        suggestion=suggestion,
+        context_note=note,
+        display_label=label,
+    )
 
 
 def check_trimming_for_context(

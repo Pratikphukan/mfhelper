@@ -1,9 +1,9 @@
 """Market regime and valuation context for dip-buying alerts.
 
 Classifies the broad market from the NIFTY 500 and India VIX, and reads the
-Nifty 50 P/E. The result is advice only: it labels alerts and suggests a buy size,
-and it never removes or hides an alert. Nothing here touches alert objects;
-``regime_filter`` adds the labels.
+Nifty 50 P/E. The result provides context for technical alerts. It does not
+suggest an investment amount or remove or hide an alert; ``regime_filter`` adds
+cautious review wording.
 
 Every external fetch is injectable so tests never hit the network, and every
 failure degrades to a NEUTRAL "context unavailable" result instead of raising.
@@ -52,9 +52,9 @@ class Regime(str, Enum):
 
 
 REGIME_STANCE = {
-    Regime.BEAR: "downtrend: dips can keep falling, only capitulation is high-conviction",
-    Regime.CORRECTION: "volatile: Tier-1 dips are weaker",
-    Regime.UPTREND: "uptrend: dips have usually been good buys",
+    Regime.BEAR: "downtrend: technical dip signals need careful review",
+    Regime.CORRECTION: "volatile: Tier-1 dip signals are treated as watch signals",
+    Regime.UPTREND: "uptrend: technical dip signals remain for review",
     Regime.NEUTRAL: "no regime view",
 }
 

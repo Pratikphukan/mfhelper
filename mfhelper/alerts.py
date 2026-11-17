@@ -33,6 +33,7 @@ class TriggeredAlert:
     action_suggestion: str
     context_note: str = ""   # Set only by the market-regime layer; advice shown under the suggestion
     portfolio_note: str = ""
+    display_label: str = ""   # User-facing label; technical alert_type remains available internally
 
 
 @dataclass(frozen=True)
@@ -43,10 +44,11 @@ class DipBuyingSignal:
     reasons: list[str]      # e.g., ["RSI is 32.5 (Oversold)", "52W Drop is -22.4% (Deep)"]
     suggestion: str
     groww_link: str         # Groww fund page, or the mutual-funds landing page as fallback
-    # Set only by the market-regime layer: suggested size as a multiple of the normal top-up.
+    # Deprecated compatibility field. No size is suggested until a private limit exists.
     multiplier: float | None = None
-    context_note: str = ""  # Why the multiplier was chosen (regime / valuation), shown in the email
+    context_note: str = ""  # Regime evidence or a portfolio note shown in the email
     portfolio_note: str = ""
+    display_label: str = ""
 
 
 def check_confluence_signal(
@@ -76,7 +78,7 @@ def check_confluence_signal(
             fund_name=fund_name,
             tier=3,
             reasons=t3_reasons,
-            suggestion="Strong Confluence Buy. Fund is highly oversold and deeply discounted from peak. Suggesting aggressive lumpsum top-up.",
+            suggestion="Technical dip conditions are present. Review the indicators; no amount is suggested.",
             groww_link=groww_link,
         )
 
@@ -95,7 +97,7 @@ def check_confluence_signal(
             fund_name=fund_name,
             tier=2,
             reasons=t2_reasons,
-            suggestion="Moderate Confluence Buy. Solid support dip. Suggesting moderate lumpsum or increased SIP multiplier.",
+            suggestion="Technical dip conditions are present. Review the indicators; no amount is suggested.",
             groww_link=groww_link,
         )
 
@@ -114,7 +116,7 @@ def check_confluence_signal(
             fund_name=fund_name,
             tier=1,
             reasons=t1_reasons,
-            suggestion="Mild Confluence Pullback. Healthy consolidation. Suggesting standard top-up.",
+            suggestion="Technical dip conditions are present. Review the indicators; no amount is suggested.",
             groww_link=groww_link,
         )
 
@@ -229,7 +231,7 @@ def check_fund_alerts(
                 current_value=current_rsi,
                 trigger_level=rules.rsi_deep_oversold,
                 alert_type="BUY TIER 3 / DEEP OVERSOLD",
-                action_suggestion="Deploy Aggressive Lumpsum (Extreme Correction Bottom)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
         elif current_rsi <= rules.rsi_moderate_dip:
             alerts.append(TriggeredAlert(
@@ -239,7 +241,7 @@ def check_fund_alerts(
                 current_value=current_rsi,
                 trigger_level=rules.rsi_moderate_dip,
                 alert_type="BUY TIER 2 / MODERATE DIP",
-                action_suggestion="Deploy Moderate Lumpsum (Healthy Correction)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
         elif current_rsi <= rules.rsi_mild_pullback:
             alerts.append(TriggeredAlert(
@@ -249,7 +251,7 @@ def check_fund_alerts(
                 current_value=current_rsi,
                 trigger_level=rules.rsi_mild_pullback,
                 alert_type="BUY TIER 1 / MILD PULLBACK",
-                action_suggestion="Deploy Smaller Top-ups (Minor Pullback Support)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
         elif current_rsi >= rules.rsi_overbought:
             alerts.append(TriggeredAlert(
@@ -272,7 +274,7 @@ def check_fund_alerts(
                 current_value=current_dist_52w,
                 trigger_level=rules.discount_deep_pct,
                 alert_type="BUY TIER 3 / 52W DEEP CAPITULATION",
-                action_suggestion="Deploy Aggressive Lumpsum (Generational Value Buying)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
         elif current_dist_52w <= rules.discount_moderate_pct:
             alerts.append(TriggeredAlert(
@@ -282,7 +284,7 @@ def check_fund_alerts(
                 current_value=current_dist_52w,
                 trigger_level=rules.discount_moderate_pct,
                 alert_type="BUY TIER 2 / 52W MODERATE DISCOUNT",
-                action_suggestion="Deploy Moderate Lumpsum (Solid Margin of Safety)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
         elif current_dist_52w <= rules.discount_mild_pct:
             alerts.append(TriggeredAlert(
@@ -292,7 +294,7 @@ def check_fund_alerts(
                 current_value=current_dist_52w,
                 trigger_level=rules.discount_mild_pct,
                 alert_type="BUY TIER 1 / 52W MILD DISCOUNT",
-                action_suggestion="Deploy Smaller Top-ups (Standard Retest Pullback)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
 
     # 3. 3-Tier 200D SMA Distance
@@ -305,7 +307,7 @@ def check_fund_alerts(
                 current_value=current_dist_200d_sma,
                 trigger_level=rules.sma_deep_capitulation_pct,
                 alert_type="BUY TIER 3 / SMA DEEP CAPITULATION",
-                action_suggestion="Deploy Aggressive Lumpsum (Severe Deviation Recovery Play)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
         elif current_dist_200d_sma <= rules.sma_moderate_discount_pct:
             alerts.append(TriggeredAlert(
@@ -315,7 +317,7 @@ def check_fund_alerts(
                 current_value=current_dist_200d_sma,
                 trigger_level=rules.sma_moderate_discount_pct,
                 alert_type="BUY TIER 2 / SMA MODERATE DISCOUNT",
-                action_suggestion="Deploy Moderate Lumpsum (Downtrend Accumulation)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
         elif abs(current_dist_200d_sma) <= rules.sma_trend_support_pct:
             alerts.append(TriggeredAlert(
@@ -325,7 +327,7 @@ def check_fund_alerts(
                 current_value=current_dist_200d_sma,
                 trigger_level=rules.sma_trend_support_pct,
                 alert_type="BUY TIER 1 / SMA TREND SUPPORT",
-                action_suggestion="Deploy Smaller Top-ups (Testing Critical Long-Term Support)."
+                action_suggestion="Technical dip signal triggered. Review the indicators; no amount is suggested."
             ))
 
     # 4. 200D SMA Trend Crossing Reversals
@@ -365,13 +367,11 @@ def format_multiplier(value: float) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".") + "x"
 
 
-def _signal_note_html(multiplier: float | None, context_note: str, portfolio_note: str = "") -> str:
-    """Optional regime line for a briefing card. Empty (and invisible) unless regime data is set."""
-    if multiplier is None and not context_note and not portfolio_note:
+def _signal_note_html(context_note: str, portfolio_note: str = "") -> str:
+    """Render context notes below a technical signal."""
+    if not context_note and not portfolio_note:
         return ""
     parts = []
-    if multiplier is not None:
-        parts.append(f"<strong>Suggested size:</strong> {format_multiplier(multiplier)} your normal top-up")
     if context_note:
         parts.append(html_lib.escape(context_note))
     if portfolio_note:
@@ -393,6 +393,14 @@ def _row_note_html(context_note: str, portfolio_note: str = "") -> str:
     )
 
 
+def _technical_alert_label(alert_type: str) -> str:
+    """Show buy trigger tiers as technical signals, not direct investment advice."""
+    prefix = "BUY TIER "
+    if alert_type.startswith(prefix):
+        return "TECHNICAL DIP TIER " + alert_type[len(prefix):]
+    return alert_type
+
+
 def dispatch_alerts_email(
     alerts: list[TriggeredAlert],
     email_config: AlertEmailConfig,
@@ -401,11 +409,10 @@ def dispatch_alerts_email(
     trimming_signals: list[TrimmingSignal] | None = None,
     market_context: MarketContext | None = None,
 ) -> bool:
-    """Send a beautifully formatted HTML alert digest via SMTP.
+    """Send a formatted HTML technical-signal digest via SMTP.
 
-    ``market_context`` adds a one-line regime banner. Regime notes on alerts and signals
-    are rendered when present. The regime never changes which alerts are sent, and leaving
-    everything unset gives the original email.
+    ``market_context`` adds a one-line regime banner. Technical dip signals remain visible
+    without being presented as direct buy instructions or amount recommendations.
     """
     if not email_config.enable:
         log.info("Email alerts are disabled in alerts.yaml. Skipping dispatch.")
@@ -433,7 +440,7 @@ def dispatch_alerts_email(
     # Create the HTML structure
     msg = MIMEMultipart("alternative")
     subject_prefix = "🚨 [DEV]" if is_dev else "🚨"
-    msg["Subject"] = f"{subject_prefix} MFHelper Technical Buy/Sell Alerts: {len(alerts)} Trigger(s)"
+    msg["Subject"] = f"{subject_prefix} MFHelper Technical Fund Signals: {len(alerts)} Trigger(s)"
     msg["From"] = sender
     msg["To"] = receiver
 
@@ -442,26 +449,26 @@ def dispatch_alerts_email(
         briefing_html += """
         <div style="background-color: #fdfefe; border: 1px solid #c3e6cb; border-radius: 6px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
             <h3 style="color: #155724; margin-top: 0; display: flex; align-items: center; gap: 8px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-               🚨 PORTFOLIO DIP-BUYING INTELLIGENCE BRIEFING
+               🚨 PORTFOLIO TECHNICAL DIP SIGNALS
             </h3>
             <div style="display: flex; flex-direction: column; gap: 15px; width: 100%;">
         """
         for sig in confluence_signals:
             if sig.tier == 3:
-                badge = '<span style="background-color: #f8d7da; color: #721c24; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">BUY TIER 3 (STRONG)</span>'
+                badge = '<span style="background-color: #f8d7da; color: #721c24; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">{}</span>'.format(html_lib.escape(sig.display_label or f"TECHNICAL DIP TIER {sig.tier}"))
                 border_color = "#f5c6cb"
                 card_bg = "#fdf3f2"
             elif sig.tier == 2:
-                badge = '<span style="background-color: #fff3cd; color: #856404; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">BUY TIER 2 (MODERATE)</span>'
+                badge = '<span style="background-color: #fff3cd; color: #856404; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">{}</span>'.format(html_lib.escape(sig.display_label or f"TECHNICAL DIP TIER {sig.tier}"))
                 border_color = "#ffeeba"
                 card_bg = "#fffdf0"
             else:
-                badge = '<span style="background-color: #d1ecf1; color: #0c5460; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">BUY TIER 1 (MILD)</span>'
+                badge = '<span style="background-color: #d1ecf1; color: #0c5460; padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; display: inline-block;">{}</span>'.format(html_lib.escape(sig.display_label or f"TECHNICAL DIP TIER {sig.tier}"))
                 border_color = "#bee5eb"
                 card_bg = "#f4fafd"
                 
             reasons_str = ", ".join(sig.reasons)
-            note_html = _signal_note_html(sig.multiplier, sig.context_note, sig.portfolio_note)
+            note_html = _signal_note_html(sig.context_note, sig.portfolio_note)
             briefing_html += f"""
                 <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
                     <div style="margin-bottom: 8px;">
@@ -476,7 +483,7 @@ def dispatch_alerts_email(
                     </div>{note_html}
                     <div style="margin-top: 12px;">
                         <a href="{sig.groww_link}" target="_blank" style="background-color: #155724; color: #ffffff; padding: 6px 14px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold; display: inline-block;">
-                            🛒 BUY ON GROWW
+                            🛒 REVIEW ON GROWW
                         </a>
                     </div>
                 </div>
@@ -509,7 +516,7 @@ def dispatch_alerts_email(
                 card_bg = "#fffdf0"
                 
             reasons_str = ", ".join(sig.reasons)
-            note_html = _signal_note_html(None, sig.context_note, sig.portfolio_note)
+            note_html = _signal_note_html(sig.context_note, sig.portfolio_note)
             briefing_html += f"""
                 <div style="border: 1px solid {border_color}; background-color: {card_bg}; padding: 15px; border-radius: 6px; margin-bottom: 12px;">
                     <div style="margin-bottom: 8px;">
@@ -564,7 +571,7 @@ def dispatch_alerts_email(
             <td style="padding: 10px; border: 1px solid #dee2e6; font-weight: bold;">{alt.fund_name} ({alt.scheme_code})</td>
             <td style="padding: 10px; border: 1px solid #dee2e6;">{alt.indicator_name}</td>
             <td style="padding: 10px; border: 1px solid #dee2e6; font-weight: bold;">{alt.current_value:.2f}{value_suffix}</td>
-            <td style="padding: 10px; border: 1px solid #dee2e6;">{alt.alert_type}</td>
+            <td style="padding: 10px; border: 1px solid #dee2e6;">{html_lib.escape(alt.display_label or _technical_alert_label(alt.alert_type))}</td>
             <td style="padding: 10px; border: 1px solid #dee2e6; font-style: italic;">{alt.action_suggestion}{row_note_html}</td>
         </tr>
         """

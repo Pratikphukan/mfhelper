@@ -218,9 +218,9 @@ MAX_SHEET_NAME_LENGTH = 90
 class RegimeSettings:
     """Market regime / valuation context (``regime:`` in alerts.yaml). Everything is off by default.
 
-    ``enable`` adds advice (notes and suggested sizes) to alerts. ``record_to_sheet`` only records
-    a daily row in its own Google Sheet tab. The two are independent: recording alone never
-    changes an alert or an email.
+    ``enable`` adds market context and cautious review wording to technical dip alerts.
+    ``record_to_sheet`` only records a daily row in its own Google Sheet tab. The two are
+    independent: recording alone never changes an alert or an email.
     """
 
     enable: bool = False
@@ -247,7 +247,7 @@ class RegimeSettings:
     pe_stretched: float = 24.0
     pe_cheap: float = 18.0
 
-    # Suggested buy size, as a multiple of the user's normal SIP/top-up (text only).
+    # Deprecated: retained for private-config compatibility, currently ignored by alert advice.
     multiplier_tier1: float = 1.0
     multiplier_tier2: float = 1.5
     multiplier_tier3: float = 2.0

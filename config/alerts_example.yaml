@@ -34,9 +34,8 @@ email:
 # Two independent switches:
 #   record_to_sheet  records one row per daily run in its own Google Sheet tab. It never changes
 #                    an alert or an email, so it is safe to turn on first and watch for a while.
-#   enable           adds a short note about the broad market (NIFTY 500 + India VIX) and a
-#                    suggested size from the Nifty 50 P/E to buy alerts. Advice only: no alert is
-#                    ever removed or hidden.
+#   enable           adds broad-market context and cautious review wording to technical dip
+#                    alerts. It does not suggest an investment amount or hide a signal.
 # Run `python regime_main.py` to see what the daily run would use today.
 regime:
   enable: false
@@ -53,15 +52,15 @@ regime:
     slope_lookback_days: 20
     max_data_age_days: 5             # older market data is ignored (regime falls back to NEUTRAL)
 
-  capitulation:                      # BEAR only: a buy meeting both is tagged CAPITULATION
+  capitulation:                      # BEAR only: both thresholds trigger a capitulation review label
     rsi: 25.0
     sma_discount_pct: -12.0
 
   valuation:
-    pe_stretched: 24.0               # above this: trim alerts fire earlier, buy size x stretched_factor
-    pe_cheap: 18.0                   # below this: buy size x cheap_factor
+    pe_stretched: 24.0               # above this: trim alerts fire earlier
+    pe_cheap: 18.0                   # valuation context only; no buy size is suggested
 
-  multipliers:                       # suggested size as a multiple of your normal SIP / top-up
+  multipliers:                       # deprecated: accepted for config compatibility, currently unused
     tier1: 1.0
     tier2: 1.5
     tier3: 2.0

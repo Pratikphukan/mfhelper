@@ -179,14 +179,15 @@ def test_get_quarterly_aaum_handles_malformed_cache(tmp_path):
 
 def test_get_quarterly_aaum_cached(tmp_path):
     cache_file = tmp_path / "quarterly_aaum.json"
+    now_iso = datetime.now(timezone.utc).isoformat()
     cache_file.write_text(
-        """{
-          "fetched_at": "2026-11-09T00:00:00+00:00",
+        f"""{{
+          "fetched_at": "{now_iso}",
           "quarter_label": "Jul-Sep 2026",
-          "aum_by_code": {
+          "aum_by_code": {{
             "120492": 2337.33
-          }
-        }""",
+          }}
+        }}""",
         encoding="utf-8",
     )
 

@@ -54,20 +54,20 @@ def _email_config() -> AlertEmailConfig:
 def sample_inputs():
     triggered = [
         TriggeredAlert("100001", "Example Flexi Cap Direct Growth", "RSI (14)", 31.2, 35.0,
-                       "BUY TIER 3 / DEEP OVERSOLD", "Deploy Aggressive Lumpsum (Extreme Correction Bottom)."),
+                       "BUY TIER 3 / DEEP OVERSOLD", "Technical dip signal triggered. Review the indicators; no amount is suggested."),
         TriggeredAlert("100002", "Example Mid Cap Direct Growth", "52W High Distance", -6.1, -5.0,
-                       "BUY TIER 1 / 52W MILD DISCOUNT", "Deploy Smaller Top-ups (Standard Retest Pullback)."),
+                       "BUY TIER 1 / 52W MILD DISCOUNT", "Technical dip signal triggered. Review the indicators; no amount is suggested."),
         TriggeredAlert("100003", "Example Large Cap Direct Growth", "RSI (14)", 74.0, 70.0,
                        "MOMENTUM WARNING / TRIM", "Pause Fresh Purchases / Trim Excess Allocation."),
     ]
     confluence = [
         DipBuyingSignal("100001", "Example Flexi Cap Direct Growth", 3,
                         ["RSI is 31.20 (Deeply Oversold)", "52W Drop is -22.00% (Deep Discount)"],
-                        "Strong Confluence Buy. Fund is highly oversold and deeply discounted from peak. Suggesting aggressive lumpsum top-up.",
+                        "Technical dip conditions are present. Review the indicators; no amount is suggested.",
                         "https://groww.in/mutual-funds/jm-flexi-cap-fund-direct-growth"),
         DipBuyingSignal("100002", "Example Mid Cap Direct Growth", 1,
                         ["RSI is 52.00 (Mild Pullback)", "52W Drop is -6.10% (Mild Discount)"],
-                        "Mild Confluence Pullback. Healthy consolidation. Suggesting standard top-up.",
+                        "Technical dip conditions are present. Review the indicators; no amount is suggested.",
                         "https://groww.in/mutual-funds/motilal-oswal-most-focused-midcap-30-fund-direct-growth"),
     ]
     trimming = [
@@ -92,7 +92,7 @@ def render_baseline_html(monkeypatch, **extra_kwargs) -> str:
     return html_part.get_payload(decode=True).decode("utf-8")
 
 
-def test_email_html_matches_pre_regime_baseline(monkeypatch):
+def test_email_html_matches_technical_signal_baseline(monkeypatch):
     html = render_baseline_html(monkeypatch)
 
     if os.environ.get("UPDATE_EMAIL_BASELINE") == "1":
@@ -137,7 +137,7 @@ def test_alert_row_note_is_rendered_and_escaped(monkeypatch):
     assert html.count("Market is volatile") == 1  # only the one row that has a note
 
 
-def test_multiplier_and_note_appear_on_the_buy_card_only(monkeypatch):
+def test_buy_card_never_shows_multiplier_but_keeps_context_note(monkeypatch):
     from dataclasses import replace
 
     triggered, confluence, trimming = sample_inputs()
@@ -147,9 +147,33 @@ def test_multiplier_and_note_appear_on_the_buy_card_only(monkeypatch):
     alerts.dispatch_alerts_email(triggered, _email_config(), confluence, is_dev=True, trimming_signals=trimming)
     message = message_from_string(FakeSMTP.sent[0])
     html = next(p for p in message.walk() if p.get_content_type() == "text/html").get_payload(decode=True).decode()
-    assert "Suggested size:</strong> 1.88x your normal top-up" in html
+    assert "Suggested size:" not in html and "normal top-up" not in html
+    assert "1.88x" not in html
     assert "x1.25 &lt;b&gt;" in html  # escaped
-    assert html.count("Suggested size:") == 1
+
+
+def test_regime_buy_wording_and_review_button_are_consistent(monkeypatch):
+    from dataclasses import replace
+
+    triggered, confluence, trimming = sample_inputs()
+    triggered[0] = replace(
+        triggered[0], display_label="DIP DETECTED — WATCH · TECHNICAL DIP TIER 3",
+        action_suggestion="A technical dip signal appeared during a broad-market downtrend. Watch and review.",
+    )
+    confluence[0] = replace(
+        confluence[0], display_label="DIP DETECTED — WATCH · TECHNICAL DIP TIER 3",
+        suggestion="A technical dip signal appeared during a broad-market downtrend. Watch and review.",
+    )
+    monkeypatch.setattr(alerts.smtplib, "SMTP", FakeSMTP)
+    FakeSMTP.sent = []
+    alerts.dispatch_alerts_email(triggered, _email_config(), confluence, is_dev=True, trimming_signals=trimming)
+    message = message_from_string(FakeSMTP.sent[0])
+    html = next(p for p in message.walk() if p.get_content_type() == "text/html").get_payload(decode=True).decode()
+
+    assert html.count("DIP DETECTED — WATCH · TECHNICAL DIP TIER 3") == 2
+    assert "BUY TIER" not in html and "BUY ON GROWW" not in html
+    assert "REVIEW ON GROWW" in html and "TRIM ON GROWW" in html
+    assert "normal top-up" not in html
 
 
 def test_trim_context_note_is_rendered(monkeypatch):
